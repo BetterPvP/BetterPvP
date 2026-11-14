@@ -1,80 +1,83 @@
 package me.mykindos.betterpvp.core.command.commands.admin.zone;
 
-import com.google.inject.Inject;
+import com.mojang.brigadier.arguments.ArgumentType;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
+import java.util.Optional;
+import java.util.function.Consumer;
 import me.mykindos.betterpvp.core.Core;
+import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import me.mykindos.betterpvp.core.utilities.UtilServer;
 import me.mykindos.betterpvp.core.world.zone.Zone;
 import me.mykindos.betterpvp.core.world.zone.ZoneManager;
 import me.mykindos.betterpvp.core.world.zone.discovery.ZoneDiscoveryService;
 import net.kyori.adventure.key.Key;
-import org.bukkit.Bukkit;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-import org.jetbrains.annotations.Nullable;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 
 /**
- * Shared base for the {@code /zone discovery} leaf subcommands: holds the injected services, resolves player and zone
- * arguments, and tab-completes online players ({@code PLAYER}) and discoverable zone keys ({@code ZONE}).
+ * Shared base for the {@code /zone discovery} leaf subcommands: holds their services, builds the discoverable-zone
+ * argument and looks up the named player.
  */
-abstract class AbstractZoneDiscoverySubCommand extends Command {
+abstract class AbstractZoneDiscoverySubCommand extends BrigadierCommand {
 
-    private static final String ZONE = "ZONE";
+    protected final ZoneDiscoveryService discoveryService;
+    protected final ZoneManager zoneManager;
+    protected final Core core;
 
-    @Inject
-    protected ClientManager clientManager;
-    @Inject
-    protected ZoneDiscoveryService discoveryService;
-    @Inject
-    protected ZoneManager zoneManager;
-    @Inject
-    protected Core core;
-
-    @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        final List<String> completions = new ArrayList<>();
-        if (args.length == 0) {
-            return completions;
-        }
-        final String arg = args[args.length - 1].toLowerCase();
-        switch (getArgumentType(args.length)) {
-            case "PLAYER" -> Bukkit.getOnlinePlayers().stream()
-                    .map(Player::getName)
-                    .filter(name -> name.toLowerCase().startsWith(arg))
-                    .forEach(completions::add);
-            case ZONE -> zoneManager.getAllZones().stream()
-                    .filter(Zone::isDiscoverable)
-                    .map(zone -> zone.getKey().asString())
-                    .filter(key -> key.toLowerCase().startsWith(arg))
-                    .forEach(completions::add);
-        }
-        return completions;
+    protected AbstractZoneDiscoverySubCommand(ClientManager clientManager, ZoneDiscoveryService discoveryService,
+                                              ZoneManager zoneManager, Core core) {
+        super(clientManager);
+        this.discoveryService = discoveryService;
+        this.zoneManager = zoneManager;
+        this.core = core;
     }
 
     /**
-     * Removes a leading token equal to this subcommand's name. Two-level-deep subcommands (under {@code /zone
-     * discovery}) receive their own name as {@code args[0]} from the command dispatcher, so this normalizes the args.
+     * An argument for a zone key, suggesting every discoverable zone.
      */
-    protected String[] stripName(String[] args) {
-        if (args.length > 0 && args[0].equalsIgnoreCase(getName())) {
-            return Arrays.copyOfRange(args, 1, args.length);
-        }
-        return args;
+    protected RequiredArgumentBuilder<CommandSourceStack, Key> zoneArgument(String name) {
+        final ArgumentType<Key> type = ArgumentTypes.key();
+        return BrigadierNodes.argument(name, type)
+                .suggests((context, builder) -> {
+                    zoneManager.getAllZones().stream()
+                            .filter(Zone::isDiscoverable)
+                            .map(zone -> zone.getKey().asString())
+                            .filter(key -> key.toLowerCase().startsWith(builder.getRemainingLowerCase()))
+                            .forEach(builder::suggest);
+                    return builder.buildFuture();
+                });
     }
 
-    protected @Nullable Zone resolveZone(String keyArg) {
-        try {
-            return zoneManager.getZone(Key.key(keyArg)).orElse(null);
-        } catch (Exception ex) {
-            return null;
+    /**
+     * @return the zone with this key, after telling the sender when there is none
+     */
+    protected Optional<Zone> zone(CommandSender sender, Key key) {
+        final Optional<Zone> zone = zoneManager.getZone(key);
+        if (zone.isEmpty()) {
+            UtilMessage.message(sender, "core.prefix.zones", "core.command.zone.unknown_zone",
+                    Component.text(key.asString(), NamedTextColor.YELLOW));
         }
+        return zone;
     }
 
-    protected String zoneArgType() {
-        return ZONE;
+    /**
+     * Looks up a player by name, offline included, and runs {@code action} on the main thread when they exist.
+     */
+    protected void withPlayer(CommandSender sender, String targetName, Consumer<Client> action) {
+        clientManager.search(sender).offline(targetName).thenAccept(result -> UtilServer.runTask(core, () -> {
+            if (result.isEmpty()) {
+                UtilMessage.message(sender, "core.prefix.zones", "core.command.zone.player_not_found",
+                        Component.text(targetName, NamedTextColor.YELLOW));
+                return;
+            }
+            action.accept(result.get());
+        }));
     }
 }

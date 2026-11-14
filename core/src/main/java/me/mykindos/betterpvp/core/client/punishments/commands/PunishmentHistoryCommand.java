@@ -2,6 +2,8 @@ package me.mykindos.betterpvp.core.client.punishments.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import java.util.Comparator;
+import java.util.List;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.client.Client;
@@ -9,33 +11,29 @@ import me.mykindos.betterpvp.core.client.punishments.Punishment;
 import me.mykindos.betterpvp.core.client.punishments.PunishmentHandler;
 import me.mykindos.betterpvp.core.client.punishments.menu.PunishmentItem;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.IConsoleCommand;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
 import me.mykindos.betterpvp.core.inventory.item.Item;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.menu.impl.ViewCollectionMenu;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.Comparator;
-import java.util.List;
-
 @Singleton
 @CustomLog
-@SubCommand(LegacyPunishmentCommand.class)
-public class PunishmentHistoryCommand extends Command implements IConsoleCommand {
-
-    private final ClientManager clientManager;
+@BrigadierSubCommand(LegacyPunishmentCommand.class)
+public class PunishmentHistoryCommand extends PunishmentSubCommand {
     private final PunishmentHandler punishmentHandler;
 
     @Inject
     public PunishmentHistoryCommand(ClientManager clientManager, PunishmentHandler punishmentHandler) {
-        this.clientManager = clientManager;
+        super(clientManager);
         this.punishmentHandler = punishmentHandler;
-        aliases.add("h");
+        getAliases().add("h");
     }
 
     @Override
@@ -45,11 +43,16 @@ public class PunishmentHistoryCommand extends Command implements IConsoleCommand
 
     @Override
     public String getDescription() {
-        return "core.command.punishment-history.description";
+        return "Punish History Command";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.punishment-history.description");
+    }
+
+    @Override
+    protected void execute(Player player, Client client, String... args) {
         if (args.length < 1) {
             UtilMessage.message(player, "core.prefix.command", "core.command.punishment.history.usage");
             return;
@@ -82,7 +85,7 @@ public class PunishmentHistoryCommand extends Command implements IConsoleCommand
     }
 
     @Override
-    public void execute(CommandSender sender, String[] args) {
+    protected void execute(CommandSender sender, String[] args) {
         if (args.length < 1) {
             UtilMessage.message(sender, "core.prefix.command", "core.command.punishment.history.usage");
             return;
@@ -100,7 +103,7 @@ public class PunishmentHistoryCommand extends Command implements IConsoleCommand
     }
 
     protected void processHistory(CommandSender sender, Client target) {
-        UtilMessage.message(sender, "core.prefix.command", "core.command.punishment.history.header", net.kyori.adventure.text.Component.text(target.getName()));
+        UtilMessage.message(sender, "core.prefix.command", "core.command.punishment.history.header", Component.text(target.getName()));
         target.getPunishments().sort(Comparator.comparingLong(Punishment::getExpiryTime).reversed());
         target.getPunishments().forEach(punishment -> {
             UtilMessage.message(sender, "", punishment.getPunishmentInformation(clientManager));
@@ -108,10 +111,8 @@ public class PunishmentHistoryCommand extends Command implements IConsoleCommand
     }
 
     @Override
-    public String getArgumentType(int i) {
-        if (i == 1) {
-            return ArgumentType.PLAYER.name();
-        }
-        return ArgumentType.NONE.name();
+    protected List<String> suggestions(CommandSender sender, String[] args) {
+        return args.length == 1 ? Bukkit.getOnlinePlayers().stream().map(Player::getName)
+                .filter(name -> name.toLowerCase().startsWith(args[0].toLowerCase())).toList() : List.of();
     }
 }

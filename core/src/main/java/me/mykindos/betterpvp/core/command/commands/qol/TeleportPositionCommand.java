@@ -1,9 +1,15 @@
 package me.mykindos.betterpvp.core.command.commands.qol;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.framework.annotations.WithReflection;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilLocation;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
@@ -11,14 +17,16 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 
+/**
+ * Teleports the executor to coordinates, where {@code ~} is relative to where they stand.
+ */
 @Singleton
-public class TeleportPositionCommand extends Command {
+public class TeleportPositionCommand extends BrigadierCommand {
 
-    private static final String TELEPORT_PREFIX = "core.prefix.teleport";
-
-    @WithReflection
-    public TeleportPositionCommand() {
-        aliases.add("tppos");
+    @Inject
+    public TeleportPositionCommand(ClientManager clientManager) {
+        super(clientManager);
+        getAliases().add("tppos");
     }
 
     @Override
@@ -28,32 +36,32 @@ public class TeleportPositionCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.teleport-position.description";
+        return "Teleport to a specific position";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length == 3) {
-            Location location = UtilLocation.getTeleportLocation(player.getLocation(), args);
-            player.teleport(location);
-            UtilMessage.message(player, TELEPORT_PREFIX, "core.command.teleportposition.success",
-                    Component.text(location.getX(), NamedTextColor.GREEN),
-                    Component.text(location.getY(), NamedTextColor.GREEN),
-                    Component.text(location.getZ(), NamedTextColor.GREEN));
-        } else {
-            UtilMessage.message(player, TELEPORT_PREFIX, "core.command.teleportposition.usage");
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.teleport-position.description");
     }
 
     @Override
-    public String getArgumentType(int arg) {
-        ArgumentType argType = switch (arg) {
-            case 1 -> ArgumentType.POSITION_X;
-            case 2 -> ArgumentType.POSITION_Y;
-            case 3 -> ArgumentType.POSITION_Z;
-            default -> ArgumentType.NONE;
-        };
-
-        return argType.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("x", StringArgumentType.word())
+                        .then(BrigadierNodes.argument("y", StringArgumentType.word())
+                                .then(BrigadierNodes.argument("z", StringArgumentType.word())
+                                        .executes(context -> {
+                                            final Player player = getPlayerFromExecutor(context);
+                                            final Location location = UtilLocation.getTeleportLocation(player.getLocation(), new String[]{
+                                                    context.getArgument("x", String.class),
+                                                    context.getArgument("y", String.class),
+                                                    context.getArgument("z", String.class)});
+                                            player.teleport(location);
+                                            UtilMessage.message(player, "core.prefix.teleport", "core.command.teleportposition.success",
+                                                    Component.text(location.getX(), NamedTextColor.GREEN),
+                                                    Component.text(location.getY(), NamedTextColor.GREEN),
+                                                    Component.text(location.getZ(), NamedTextColor.GREEN));
+                                            return Command.SINGLE_SUCCESS;
+                                        }))));
     }
 }

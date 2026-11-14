@@ -2,37 +2,42 @@ package me.mykindos.betterpvp.clans.clans.commands.chatcommands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Optional;
 import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.core.chat.channels.ChatChannel;
 import me.mykindos.betterpvp.core.chat.events.ChatSentEvent;
-import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
-import java.util.Optional;
-
+/**
+ * Sends one message to the executor's clan chat, or toggles their chat channel between clan and server.
+ */
 @Singleton
-public class ClanChatCommand extends Command {
+public class ClanChatCommand extends BrigadierCommand {
 
     private final Clans clans;
-    private final ClientManager clientManager;
     private final ClanManager clanManager;
 
     @Inject
-    public ClanChatCommand(Clans clans, ClientManager clientManager, ClanManager clanManager) {
+    public ClanChatCommand(ClientManager clientManager, Clans clans, ClanManager clanManager) {
+        super(clientManager);
         this.clans = clans;
-        this.clientManager = clientManager;
         this.clanManager = clanManager;
-
-        aliases.add("cc");
+        getAliases().add("cc");
     }
 
     @Override
@@ -42,30 +47,39 @@ public class ClanChatCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "clans.command.clan-chat.description";
+        return "Toggle clan only chat";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        final Gamer gamer = client.getGamer();
-        Optional<Clan> clanOptional = clanManager.getClanByPlayer(player);
-        if (clanOptional.isEmpty()) {
+    public Component getDescriptionComponent() {
+        return Translations.component("clans.command.clan-chat.description");
+    }
+
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    final Gamer gamer = getClientFromExecutor(context).getGamer();
+                    clan(player).ifPresent(clan -> gamer.setChatChannel(gamer.getChatChannel().equals(clan.getClanChatChannel())
+                            ? ChatChannel.SERVER : ChatChannel.CLAN));
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.argument("message", StringArgumentType.greedyString())
+                        .executes(context -> {
+                            final Player player = getPlayerFromExecutor(context);
+                            final String message = context.getArgument("message", String.class);
+                            clan(player).ifPresent(clan -> UtilServer.callEventAsync(clans, new ChatSentEvent(player, clan.getClanChatChannel(),
+                                    Component.text(UtilFormat.spoofNameForLunar(player.getName()) + ": "), Component.text(message))));
+                            return Command.SINGLE_SUCCESS;
+                        }));
+    }
+
+    private Optional<Clan> clan(Player player) {
+        final Optional<Clan> clan = clanManager.getClanByPlayer(player);
+        if (clan.isEmpty()) {
             UtilMessage.message(player, "clans.prefix", "clans.command.clan-chat.no-clan");
-            return;
         }
-
-        Clan clan = clanOptional.get();
-
-        if (args.length > 0) {
-            UtilServer.callEventAsync(clans, new ChatSentEvent(player, clan.getClanChatChannel(), Component.text(UtilFormat.spoofNameForLunar(player.getName()) + ": "),
-                    Component.text(String.join(" ", args))));
-            return;
-        }
-
-        if (gamer.getChatChannel().equals(clan.getClanChatChannel())) {
-            gamer.setChatChannel(ChatChannel.SERVER);
-        } else {
-            gamer.setChatChannel(ChatChannel.CLAN);
-        }
+        return clan;
     }
 }

@@ -1,0 +1,31 @@
+skills:
+  requiredRank: PLAYER
+  enabled: true
+  seeOtherPlayerSkillsRank: MODERATOR
+build:
+  requiredRank: ADMIN
+  enabled: true
+kit:
+  requiredRank: ADMIN
+  enabled: true
+sendskills:
+  requiredRank: PLAYER
+  enabled: true
+skilldescription:
+  requiredRank: ADMIN
+  enabled: true
+legends:
+  requiredRank: ADMIN
+  enabled: true
+runes:
+  requiredRank: ADMIN
+  enabled: true
+promptbuild:
+  requiredRank: ADMIN
+  enabled: true
+champions:
+  requiredRank: ADMIN
+  enabled: true
+combat:
+  requiredRank: PLAYER
+  enabled: true

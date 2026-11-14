@@ -1,23 +1,10 @@
 package me.mykindos.betterpvp.core.world.logger.commands.subcommands;
 
 import com.google.inject.Inject;
-import lombok.CustomLog;
-import me.mykindos.betterpvp.core.Core;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
-import me.mykindos.betterpvp.core.database.Database;
-import me.mykindos.betterpvp.core.utilities.UtilMessage;
-import me.mykindos.betterpvp.core.utilities.UtilServer;
-import me.mykindos.betterpvp.core.world.logger.WorldLog;
-import me.mykindos.betterpvp.core.world.logger.WorldLogAction;
-import me.mykindos.betterpvp.core.world.logger.WorldLogHandler;
-import me.mykindos.betterpvp.core.world.logger.commands.WorldLoggerCommand;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.entity.Player;
-
+import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -27,13 +14,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.CustomLog;
+import me.mykindos.betterpvp.core.Core;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.database.Database;
+import me.mykindos.betterpvp.core.locale.Translations;
+import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import me.mykindos.betterpvp.core.utilities.UtilServer;
+import me.mykindos.betterpvp.core.world.logger.WorldLog;
+import me.mykindos.betterpvp.core.world.logger.WorldLogAction;
+import me.mykindos.betterpvp.core.world.logger.WorldLogHandler;
+import me.mykindos.betterpvp.core.world.logger.commands.WorldLoggerCommand;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.entity.Player;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import static me.mykindos.betterpvp.core.database.jooq.Tables.WORLD_LOGS;
 import static me.mykindos.betterpvp.core.database.jooq.Tables.WORLD_LOGS_METADATA;
 
 @CustomLog
-@SubCommand(WorldLoggerCommand.class)
-public class RestoreSubCommand extends Command {
+@Singleton
+@BrigadierSubCommand(WorldLoggerCommand.class)
+public class RestoreSubCommand extends BrigadierCommand {
 
     private final Core core;
     private final WorldLogHandler worldLogHandler;
@@ -41,7 +49,8 @@ public class RestoreSubCommand extends Command {
     private static final Pattern timePattern = Pattern.compile("(\\d+)([smhd])");
 
     @Inject
-    public RestoreSubCommand(Core core, WorldLogHandler worldLogHandler, Database database) {
+    public RestoreSubCommand(ClientManager clientManager, Core core, WorldLogHandler worldLogHandler, Database database) {
+        super(clientManager);
         this.core = core;
         this.worldLogHandler = worldLogHandler;
         this.database = database;
@@ -54,11 +63,29 @@ public class RestoreSubCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.restore.description";
+        return "Restore block changes within a radius and time period";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.restore.description");
+    }
+
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    execute(getPlayerFromExecutor(context));
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(WorldLoggerCommand.filtersArgument()
+                        .executes(context -> {
+                            execute(getPlayerFromExecutor(context), context.getArgument("filters", String.class).split(" "));
+                            return Command.SINGLE_SUCCESS;
+                        }));
+    }
+
+    private void execute(Player player, String... args) {
         if (args.length < 2) {
             UtilMessage.message(player, "core.prefix.command", "core.command.worldlogger.restore.usage");
             UtilMessage.message(player, "core.prefix.command", "core.command.worldlogger.restore.example");
@@ -192,7 +219,7 @@ public class RestoreSubCommand extends Command {
         List<WorldLog> latestLogs = new ArrayList<>(latestLogsMap.values());
         int blocksPerTick = 20;
 
-        new org.bukkit.scheduler.BukkitRunnable() {
+        new BukkitRunnable() {
             private int index = 0;
 
             @Override

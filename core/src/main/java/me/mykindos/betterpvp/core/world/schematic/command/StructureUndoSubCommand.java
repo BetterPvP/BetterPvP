@@ -1,24 +1,36 @@
 package me.mykindos.betterpvp.core.world.schematic.command;
 
 import com.google.inject.Inject;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.world.schematic.SchematicRenderer;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 
-/** {@code /structure undo} takes your most recent structure paste back out. */
-@SubCommand(StructureCommand.class)
-public class StructureUndoSubCommand extends Command {
+/**
+ * {@code /structure undo} takes the executor's most recent structure paste back out.
+ */
+@Singleton
+@BrigadierSubCommand(StructureCommand.class)
+public class StructureUndoSubCommand extends BrigadierCommand {
 
     private final SchematicRenderer renderer;
     private final StructurePasteHistory history;
 
     @Inject
-    public StructureUndoSubCommand(SchematicRenderer renderer, StructurePasteHistory history) {
+    public StructureUndoSubCommand(ClientManager clientManager, SchematicRenderer renderer, StructurePasteHistory history) {
+        super(clientManager);
         this.renderer = renderer;
         this.history = history;
     }
@@ -34,15 +46,28 @@ public class StructureUndoSubCommand extends Command {
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        history.takeLatest(player.getUniqueId()).ifPresentOrElse(paste -> {
-            final World world = Bukkit.getWorld(paste.getWorld());
-            if (world == null) {
-                UtilMessage.simpleMessage(player, StructureCommand.PREFIX, "<red>That paste's world is no longer loaded.");
-                return;
-            }
-            renderer.restore(world, paste.getUndo());
-            UtilMessage.simpleMessage(player, StructureCommand.PREFIX, "Undid a paste of %d blocks.", paste.getUndo().size());
-        }, () -> UtilMessage.simpleMessage(player, StructureCommand.PREFIX, "<red>Nothing to undo."));
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.structure.undo.description");
+    }
+
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    history.takeLatest(player.getUniqueId()).ifPresentOrElse(paste -> {
+                        final World world = Bukkit.getWorld(paste.getWorld());
+                        if (world == null) {
+                            UtilMessage.message(player, StructureCommand.PREFIX,
+                                    Translations.component("core.command.structure.undo.world-unloaded").color(NamedTextColor.RED));
+                            return;
+                        }
+                        renderer.restore(world, paste.getUndo());
+                        UtilMessage.message(player, StructureCommand.PREFIX, "core.command.structure.undo.undone",
+                                Component.text(paste.getUndo().size()));
+                    }, () -> UtilMessage.message(player, StructureCommand.PREFIX,
+                            Translations.component("core.command.structure.undo.nothing").color(NamedTextColor.RED)));
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 }

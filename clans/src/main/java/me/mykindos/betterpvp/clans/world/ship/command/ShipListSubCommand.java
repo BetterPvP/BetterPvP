@@ -2,30 +2,35 @@ package me.mykindos.betterpvp.clans.world.ship.command;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.List;
 import me.mykindos.betterpvp.clans.world.ship.Berth;
 import me.mykindos.betterpvp.clans.world.ship.ShipService;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.List;
-
 /**
- * {@code /ship list} — every mooring in the world you are standing in, and what is tied up at it.
+ * {@code /ship list} shows every mooring in the executor's world, and what is tied up at it.
  */
 @Singleton
-@SubCommand(ShipCommand.class)
-public class ShipListSubCommand extends Command {
+@BrigadierSubCommand(ShipCommand.class)
+public class ShipListSubCommand extends BrigadierCommand {
 
     private final ShipService ships;
 
     @Inject
-    public ShipListSubCommand(@NotNull ShipService ships) {
+    public ShipListSubCommand(ClientManager clientManager, @NotNull ShipService ships) {
+        super(clientManager);
         this.ships = ships;
     }
 
@@ -40,22 +45,29 @@ public class ShipListSubCommand extends Command {
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        final List<Berth> berths = ships.berths(player.getWorld());
-        if (berths.isEmpty()) {
-            UtilMessage.simpleMessage(player, ShipCommand.PREFIX,
-                    Component.text("No moorings in this world."));
-            return;
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("clans.command.ship.list.description");
+    }
 
-        UtilMessage.simpleMessage(player, ShipCommand.PREFIX, Component.text(berths.size(), NamedTextColor.YELLOW)
-                .append(Component.text(" mooring(s) in ", NamedTextColor.GRAY))
-                .append(Component.text(player.getWorld().getName(), NamedTextColor.AQUA)));
-        for (Berth berth : berths) {
-            UtilMessage.simpleMessage(player, ShipCommand.PREFIX, Component.text(berth.getId(), NamedTextColor.WHITE)
-                    .append(Component.space())
-                    .append(state(player, berth)));
-        }
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    final List<Berth> berths = ships.berths(player.getWorld());
+                    if (berths.isEmpty()) {
+                        UtilMessage.message(player, "clans.prefix.ships", "clans.command.ship.no-moorings");
+                        return Command.SINGLE_SUCCESS;
+                    }
+                    UtilMessage.message(player, "clans.prefix.ships", "clans.command.ship.list.header",
+                            Component.text(berths.size(), NamedTextColor.YELLOW), Component.text(player.getWorld().getName(), NamedTextColor.AQUA));
+                    for (Berth berth : berths) {
+                        UtilMessage.message(player, "clans.prefix.ships", Component.text(berth.getId(), NamedTextColor.WHITE)
+                                .appendSpace()
+                                .append(state(player, berth)));
+                    }
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 
     /**
@@ -64,13 +76,13 @@ public class ShipListSubCommand extends Command {
      */
     private @NotNull Component state(@NotNull Player player, @NotNull Berth berth) {
         if (ships.isDisabled(player.getWorld(), berth.getId())) {
-            return Component.text("disabled", NamedTextColor.RED);
+            return Translations.component("clans.command.ship.list.disabled").color(NamedTextColor.RED);
         }
         if (!berth.isCrewable()) {
-            return Component.text("empty", NamedTextColor.GRAY);
+            return Translations.component("clans.command.ship.list.empty").color(NamedTextColor.GRAY);
         }
         return Component.text(berth.getStructure(), NamedTextColor.GREEN)
-                .append(Component.text(" capacity " + berth.getCapacity(), NamedTextColor.GRAY));
+                .appendSpace()
+                .append(Translations.component("clans.command.ship.list.capacity", Component.text(berth.getCapacity())).color(NamedTextColor.GRAY));
     }
-
 }

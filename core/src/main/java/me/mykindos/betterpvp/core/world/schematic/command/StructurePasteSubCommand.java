@@ -1,17 +1,24 @@
 package me.mykindos.betterpvp.core.world.schematic.command;
 
 import com.google.inject.Inject;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Optional;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.world.schematic.Schematic;
 import me.mykindos.betterpvp.core.world.schematic.SchematicPlacement;
 import me.mykindos.betterpvp.core.world.schematic.SchematicRenderer;
 import me.mykindos.betterpvp.core.world.schematic.SchematicService;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
-
-import java.util.Optional;
 
 /**
  * {@code /structure paste <name>} places a structure where you stand, turned to match the way you face.
@@ -21,16 +28,18 @@ import java.util.Optional;
  * registered, since they belong to whoever pasted the structure, not to the world's Mapper file. {@code /structure undo}
  * takes it back out.
  */
-@SubCommand(StructureCommand.class)
-public class StructurePasteSubCommand extends Command {
+@Singleton
+@BrigadierSubCommand(StructureCommand.class)
+public class StructurePasteSubCommand extends BrigadierCommand {
 
     private final SchematicService schematics;
     private final SchematicRenderer renderer;
     private final StructurePasteHistory history;
 
     @Inject
-    public StructurePasteSubCommand(SchematicService schematics, SchematicRenderer renderer,
+    public StructurePasteSubCommand(ClientManager clientManager, SchematicService schematics, SchematicRenderer renderer,
                                     StructurePasteHistory history) {
+        super(clientManager);
         this.schematics = schematics;
         this.renderer = renderer;
         this.history = history;
@@ -47,24 +56,29 @@ public class StructurePasteSubCommand extends Command {
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 1) {
-            UtilMessage.simpleMessage(player, StructureCommand.PREFIX, "Usage: /structure paste <name>");
-            return;
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.structure.paste.description");
+    }
 
-        final Optional<Schematic> loaded = schematics.load(args[0]);
-        if (loaded.isEmpty()) {
-            UtilMessage.simpleMessage(player, StructureCommand.PREFIX,
-                    "<red>No structure called '%s'.", args[0]);
-            return;
-        }
-
-        final SchematicPlacement placement = SchematicPlacement.facing(loaded.get(), player.getLocation());
-        history.record(player.getUniqueId(), player.getWorld(), renderer.paste(placement));
-
-        UtilMessage.simpleMessage(player, StructureCommand.PREFIX,
-                "Pasted <green>%s</green>: %d blocks, %d data-point(s), turned %d×90°.",
-                args[0], placement.getBlocks().size(), placement.markers().size(), placement.getQuarterTurns());
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(StructureCommand.nameArgument()
+                        .executes(context -> {
+                            final Player player = getPlayerFromExecutor(context);
+                            final String name = context.getArgument("name", String.class);
+                            final Optional<Schematic> loaded = schematics.load(name);
+                            if (loaded.isEmpty()) {
+                                UtilMessage.message(player, StructureCommand.PREFIX, Translations.component("core.command.structure.not-found",
+                                        Component.text(name)).color(NamedTextColor.RED));
+                                return Command.SINGLE_SUCCESS;
+                            }
+                            final SchematicPlacement placement = SchematicPlacement.facing(loaded.get(), player.getLocation());
+                            history.record(player.getUniqueId(), player.getWorld(), renderer.paste(placement));
+                            UtilMessage.message(player, StructureCommand.PREFIX, "core.command.structure.paste.pasted",
+                                    Component.text(name, NamedTextColor.GREEN), Component.text(placement.getBlocks().size()),
+                                    Component.text(placement.markers().size()), Component.text(placement.getQuarterTurns()));
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 }

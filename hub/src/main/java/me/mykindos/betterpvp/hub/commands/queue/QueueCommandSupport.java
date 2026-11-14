@@ -1,7 +1,5 @@
 package me.mykindos.betterpvp.hub.commands.queue;
 
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.orchestration.model.QueueSnapshot;
 import me.mykindos.betterpvp.orchestration.model.QueueStatusUpdate;
 import me.mykindos.betterpvp.orchestration.model.QueueTarget;
@@ -47,42 +45,6 @@ final class QueueCommandSupport {
         return message;
     }
 
-    static Component buildUsageMessage(Client client) {
-        Component message = Component.text()
-                .append(Component.text("● ", NamedTextColor.DARK_GRAY))
-                .append(Component.text("/queue", NamedTextColor.YELLOW))
-                .append(Component.text(" - View your current queue status.", NamedTextColor.GRAY))
-                .appendNewline()
-                .append(Component.text("● ", NamedTextColor.DARK_GRAY))
-                .append(Component.text("/queue leave", NamedTextColor.YELLOW))
-                .append(Component.text(" - Leave the queue you are currently in.", NamedTextColor.GRAY))
-                .build();
-
-        if (client.getRank().getId() >= Rank.ADMIN.getId()) {
-            message = message.appendNewline()
-                    .append(Component.text("● ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("/queue view <server>", NamedTextColor.YELLOW))
-                    .append(Component.text(" - View queue details for a server.", NamedTextColor.GRAY))
-                    .appendNewline()
-                    .append(Component.text("● ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("/queue pause <server>", NamedTextColor.YELLOW))
-                    .append(Component.text(" - Pause new queue admissions for a server.", NamedTextColor.GRAY))
-                    .appendNewline()
-                    .append(Component.text("● ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("/queue resume <server>", NamedTextColor.YELLOW))
-                    .append(Component.text(" - Re-open queue admissions for a server.", NamedTextColor.GRAY))
-                    .appendNewline()
-                    .append(Component.text("● ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("/queue remove <player>", NamedTextColor.YELLOW))
-                    .append(Component.text(" - Remove a player from the queue.", NamedTextColor.GRAY))
-                    .appendNewline()
-                    .append(Component.text("● ", NamedTextColor.DARK_GRAY))
-                    .append(Component.text("/queue admit <player>", NamedTextColor.YELLOW))
-                    .append(Component.text(" - Force the next admission for a queued player.", NamedTextColor.GRAY));
-        }
-
-        return message;
-    }
 
     static Component buildQueueSnapshotMessage(QueueSnapshot snapshot) {
         return Component.text()

@@ -2,9 +2,15 @@ package me.mykindos.betterpvp.core.stats.command;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import lombok.CustomLog;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Optional;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.stats.Leaderboard;
 import me.mykindos.betterpvp.core.stats.menu.LeaderboardCategoryMenu;
 import me.mykindos.betterpvp.core.stats.menu.LeaderboardMenu;
@@ -12,25 +18,22 @@ import me.mykindos.betterpvp.core.stats.repository.LeaderboardManager;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
-
+/**
+ * {@code /leaderboard} opens the leaderboard categories, and {@code /leaderboard <name>} opens one leaderboard.
+ */
 @Singleton
-@CustomLog
-public class LeaderboardCommand extends Command {
+public class LeaderboardCommand extends BrigadierCommand {
 
     private final LeaderboardManager leaderboards;
 
     @Inject
-    public LeaderboardCommand(LeaderboardManager leaderboards) {
+    public LeaderboardCommand(ClientManager clientManager, LeaderboardManager leaderboards) {
+        super(clientManager);
         this.leaderboards = leaderboards;
-        aliases.add("lb");
-        aliases.add("top");
+        getAliases().add("lb");
+        getAliases().add("top");
     }
 
     @Override
@@ -40,32 +43,39 @@ public class LeaderboardCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.leaderboard.description";
+        return "Leaderboard base command";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 1) {
-            new LeaderboardCategoryMenu(leaderboards).show(player);
-            return;
-        }
-
-        final String name = String.join(" ", args);
-        final Optional<Leaderboard<?, ?>> leaderboardOpt = leaderboards.getViewableByName(name);
-        if (leaderboardOpt.isEmpty() || !leaderboardOpt.get().isViewable()) {
-            UtilMessage.message(player, "core.prefix.stats", "core.command.leaderboard.not_found", Component.text(name, NamedTextColor.YELLOW));
-            return;
-        }
-
-        final Leaderboard<?, ?> leaderboard = leaderboardOpt.get();
-        new LeaderboardMenu<>(player, leaderboard, null).show(player);
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.leaderboard.description");
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) {
-                return new ArrayList<>(leaderboards.getViewable().keySet().stream().filter(name -> name.toLowerCase().startsWith(args[0].toLowerCase())).toList());
-        }
-        return Collections.emptyList();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    new LeaderboardCategoryMenu(leaderboards).show(getPlayerFromExecutor(context));
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.argument("leaderboard", StringArgumentType.greedyString())
+                        .suggests((context, builder) -> {
+                            leaderboards.getViewable().keySet().stream()
+                                    .filter(name -> name.toLowerCase().startsWith(builder.getRemainingLowerCase()))
+                                    .forEach(builder::suggest);
+                            return builder.buildFuture();
+                        })
+                        .executes(context -> {
+                            final Player player = getPlayerFromExecutor(context);
+                            final String name = context.getArgument("leaderboard", String.class);
+                            final Optional<Leaderboard<?, ?>> leaderboard = leaderboards.getViewableByName(name);
+                            if (leaderboard.isEmpty() || !leaderboard.get().isViewable()) {
+                                UtilMessage.message(player, "core.prefix.stats", "core.command.leaderboard.not_found",
+                                        Component.text(name, NamedTextColor.YELLOW));
+                                return Command.SINGLE_SUCCESS;
+                            }
+                            new LeaderboardMenu<>(player, leaderboard.get(), null).show(player);
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 }

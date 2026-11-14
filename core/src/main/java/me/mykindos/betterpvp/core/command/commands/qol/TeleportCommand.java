@@ -1,18 +1,29 @@
 package me.mykindos.betterpvp.core.command.commands.qol;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.framework.annotations.WithReflection;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
+import me.mykindos.betterpvp.core.locale.Translations;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+/**
+ * Teleports the executor to a player, or one player to another.
+ */
 @Singleton
-public class TeleportCommand extends Command {
+public class TeleportCommand extends BrigadierCommand {
 
-    @WithReflection
-    public TeleportCommand() {
-        aliases.add("tp");
+    @Inject
+    public TeleportCommand(ClientManager clientManager) {
+        super(clientManager);
+        getAliases().add("tp");
     }
 
     @Override
@@ -22,30 +33,34 @@ public class TeleportCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.teleport.description";
+        return "Teleport to a target player";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        switch (args.length) {
-            case 1 -> {
-                Player target = Bukkit.getPlayer(args[0]);
-                if (target != null) {
-                    player.teleport(target.getLocation());
-                }
-            }
-            case 2 -> {
-                Player fromPlayer = Bukkit.getPlayer(args[0]);
-                Player toPlayer = Bukkit.getPlayer(args[1]);
-                if (fromPlayer != null && toPlayer != null) {
-                    fromPlayer.teleport(toPlayer.getLocation());
-                }
-            }
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.teleport.description");
     }
 
     @Override
-    public String getArgumentType(int arg) {
-        return ArgumentType.PLAYER.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName())
+                        .executes(context -> {
+                            final Player player = getPlayerFromExecutor(context);
+                            final Player target = Bukkit.getPlayer(context.getArgument("player", String.class));
+                            if (target != null) {
+                                player.teleport(target.getLocation());
+                            }
+                            return Command.SINGLE_SUCCESS;
+                        })
+                        .then(BrigadierNodes.argument("destination", BPvPArgumentTypes.playerName())
+                                .executes(context -> {
+                                    final Player from = Bukkit.getPlayer(context.getArgument("player", String.class));
+                                    final Player to = Bukkit.getPlayer(context.getArgument("destination", String.class));
+                                    if (from != null && to != null) {
+                                        from.teleport(to.getLocation());
+                                    }
+                                    return Command.SINGLE_SUCCESS;
+                                })));
     }
 }

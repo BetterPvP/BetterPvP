@@ -2,8 +2,16 @@ package me.mykindos.betterpvp.core.tips.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Optional;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.tips.Tip;
 import me.mykindos.betterpvp.core.tips.TipManager;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
@@ -16,19 +24,20 @@ import org.bukkit.Sound;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import java.util.List;
-import java.util.Optional;
-
 import static me.mykindos.betterpvp.core.utilities.Resources.Font.NEXO;
 import static me.mykindos.betterpvp.core.utilities.Resources.Font.SMALL_CAPS;
 
+/**
+ * {@code /sendtip <player> <tip>} shows one named tip to a player.
+ */
 @Singleton
-public class SendTipCommand extends Command {
+public class SendTipCommand extends BrigadierCommand {
 
     private final TipManager tipManager;
 
     @Inject
-    public SendTipCommand(TipManager tipManager) {
+    public SendTipCommand(ClientManager clientManager, TipManager tipManager) {
+        super(clientManager);
         this.tipManager = tipManager;
     }
 
@@ -39,30 +48,45 @@ public class SendTipCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.send-tip.description";
+        return "Send a specific tip to a player";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 2) {
-            UtilMessage.message(player, "core.prefix.command", "core.command.sendtip.usage");
-            return;
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.send-tip.description");
+    }
 
-        Player target = Bukkit.getPlayer(args[0]);
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName())
+                        .then(BrigadierNodes.argument("tip", StringArgumentType.word())
+                                .suggests((context, builder) -> {
+                                    tipManager.getObjects().keySet().stream()
+                                            .filter(name -> name.startsWith(builder.getRemainingLowerCase()))
+                                            .sorted()
+                                            .forEach(builder::suggest);
+                                    return builder.buildFuture();
+                                })
+                                .executes(context -> {
+                                    send(context.getSource().getSender(), context.getArgument("player", String.class),
+                                            context.getArgument("tip", String.class));
+                                    return Command.SINGLE_SUCCESS;
+                                })));
+    }
+
+    private void send(CommandSender sender, String targetName, String tipName) {
+        final Player target = Bukkit.getPlayer(targetName);
         if (target == null) {
-            UtilMessage.message(player, "core.prefix.command", "core.command.sendtip.target.invalid", Component.text(args[0]));
+            UtilMessage.message(sender, "core.prefix.command", "core.command.sendtip.target.invalid", Component.text(targetName));
             return;
         }
-
-        String tipName = args[1].toLowerCase();
-        Optional<Tip> tipOptional = tipManager.getObject(tipName);
-        if (tipOptional.isEmpty()) {
-            UtilMessage.message(player, "core.prefix.command", "core.command.sendtip.tip.invalid", Component.text(args[1]));
+        final Optional<Tip> found = tipManager.getObject(tipName.toLowerCase());
+        if (found.isEmpty()) {
+            UtilMessage.message(sender, "core.prefix.command", "core.command.sendtip.tip.invalid", Component.text(tipName));
             return;
         }
-
-        Tip tip = tipOptional.get();
+        final Tip tip = found.get();
         UtilMessage.message(target, Component.empty());
         UtilMessage.message(target, Component.empty()
                 .append(Component.text("<glyph:question_mark_icon>").font(NEXO))
@@ -72,28 +96,6 @@ public class SendTipCommand extends Command {
                 .append(tip.getComponent()));
         UtilMessage.message(target, Component.empty());
         new SoundEffect(Sound.BLOCK_NOTE_BLOCK_CHIME, 1.5f, 1.0f).play(target);
-
-        UtilMessage.message(player, "core.prefix.command", "core.command.sendtip.sent", Component.text(tip.getName()), Component.text(target.getName()));
-    }
-
-    @Override
-    public String getArgumentType(int argCount) {
-        if (argCount == 1) {
-            return ArgumentType.PLAYER.name();
-        }
-        return ArgumentType.NONE.name();
-    }
-
-    @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        if (args.length == 2) {
-            String partial = args[1].toLowerCase();
-            return tipManager.getObjects().keySet().stream()
-                    .filter(name -> name.startsWith(partial))
-                    .sorted()
-                    .toList();
-        }
-        return super.processTabComplete(sender, args);
+        UtilMessage.message(sender, "core.prefix.command", "core.command.sendtip.sent", Component.text(tip.getName()), Component.text(target.getName()));
     }
 }
-

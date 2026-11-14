@@ -2,24 +2,47 @@ package me.mykindos.betterpvp.clans.commands.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.core.vault.restriction.ClanVaultRestrictions;
+import me.mykindos.betterpvp.clans.commands.BrigadierClansCommandLoader;
 import me.mykindos.betterpvp.clans.commands.ClansCommandLoader;
-import me.mykindos.betterpvp.clans.display.ClansSidebarListener;
-import me.mykindos.betterpvp.clans.listener.ClansListenerLoader;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.IConsoleCommand;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.tips.TipManager;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.model.Reloadable;
-import org.bukkit.command.CommandSender;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+/**
+ * {@code /clans reload} reloads Clans' config, reloadables, tips, vault restrictions and commands.
+ */
 @Singleton
-public class ClansCommand extends Command implements IConsoleCommand {
+public class ClansCommand extends BrigadierCommand {
+
+    private final Clans clans;
+    private final ClansCommandLoader commandLoader;
+    private final BrigadierClansCommandLoader brigadierClansCommandLoader;
+    private final TipManager tipManager;
+    private final ClanVaultRestrictions clanVaultRestrictions;
+
+    @Inject
+    public ClansCommand(ClientManager clientManager, Clans clans, ClansCommandLoader commandLoader,
+                        BrigadierClansCommandLoader brigadierClansCommandLoader, TipManager tipManager,
+                        ClanVaultRestrictions clanVaultRestrictions) {
+        super(clientManager);
+        this.clans = clans;
+        this.commandLoader = commandLoader;
+        this.brigadierClansCommandLoader = brigadierClansCommandLoader;
+        this.tipManager = tipManager;
+        this.clanVaultRestrictions = clanVaultRestrictions;
+    }
 
     @Override
     public String getName() {
@@ -28,73 +51,30 @@ public class ClansCommand extends Command implements IConsoleCommand {
 
     @Override
     public String getDescription() {
-        return "clans.command.clans.description";
+        return "Base clans command";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-
+    public Component getDescriptionComponent() {
+        return Translations.component("clans.command.clans.description");
     }
 
     @Override
-    public void execute(CommandSender sender, String[] args) {
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.literal("reload")
+                        .executes(context -> {
+                            clans.reload();
+                            clans.getReloadables().forEach(Reloadable::reload);
 
-    }
+                            brigadierClansCommandLoader.reload();
+                            Bukkit.getOnlinePlayers().forEach(Player::updateCommands);
+                            commandLoader.reload(clans.getClass().getPackageName());
+                            tipManager.reloadTips(clans);
+                            clanVaultRestrictions.reload();
 
-    @Override
-    public Rank getRequiredRank() {
-        return Rank.ADMIN;
-    }
-
-    @Singleton
-    @SubCommand(ClansCommand.class)
-    private static class ReloadCommand extends Command implements IConsoleCommand {
-
-        @Inject
-        private Clans clans;
-
-        @Inject
-        private ClansCommandLoader commandLoader;
-
-        @Inject
-        private ClansListenerLoader listenerLoader;
-
-        @Inject
-        private TipManager tipManager;
-
-        @Inject
-        private ClanVaultRestrictions clanVaultRestrictions;
-
-        @Inject
-        private ClansSidebarListener sidebar;
-
-        @Override
-        public String getName() {
-            return "reload";
-        }
-
-        @Override
-        public String getDescription() {
-        return "clans.command.reload.description";
-    }
-
-        @Override
-        public void execute(Player player, Client client, String... args) {
-            execute(player, args);
-        }
-
-        @Override
-        public void execute(CommandSender sender, String[] args) {
-            clans.reload();
-            clans.getReloadables().forEach(Reloadable::reload);
-
-            commandLoader.reload(clans.getClass().getPackageName());
-            tipManager.reloadTips(clans);
-
-            clanVaultRestrictions.reload();
-
-
-            UtilMessage.message(sender, "clans.prefix", "clans.command.clans.reload.success");
-        }
+                            UtilMessage.message(context.getSource().getSender(), "clans.prefix", "clans.command.clans.reload.success");
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 }

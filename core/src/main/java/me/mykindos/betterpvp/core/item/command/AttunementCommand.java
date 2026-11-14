@@ -2,8 +2,17 @@ package me.mykindos.betterpvp.core.item.command;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Optional;
+import java.util.function.UnaryOperator;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
 import me.mykindos.betterpvp.core.item.ItemFactory;
 import me.mykindos.betterpvp.core.item.ItemInstance;
 import me.mykindos.betterpvp.core.item.attunement.GuiAttunement;
@@ -11,31 +20,31 @@ import me.mykindos.betterpvp.core.item.component.impl.purity.PurityComponent;
 import me.mykindos.betterpvp.core.item.runeslot.RuneSlotDistributionRegistry;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 
-import java.util.Optional;
-
 /**
  * Admin command to attune or unattune items.
- *
- * Usage:
- *   /attune - Opens the attunement GUI
- *   /attune set <true|false> - Set attuned state for held item
- *   /attune toggle - Toggle attuned state for held item
- *   /attune set <true|false> --all - Set attuned state for all items in inventory
- *   /attune toggle --all - Toggle attuned state for all items in inventory
- *
- * Permission: Admin only
+ * <ul>
+ *     <li>{@code /attune} opens the attunement menu</li>
+ *     <li>{@code /attune set <true|false> [--all]} sets the attuned state of the held item, or every item</li>
+ *     <li>{@code /attune toggle [--all]} flips the attuned state of the held item, or every item</li>
+ * </ul>
  */
 @Singleton
-public class AttunementCommand extends Command {
+public class AttunementCommand extends BrigadierCommand {
+
+    private static final String PREFIX = "core.prefix.attunement";
+    private static final String ALL = "--all";
 
     private final ItemFactory itemFactory;
     private final RuneSlotDistributionRegistry runeSlotRegistry;
 
     @Inject
-    public AttunementCommand(ItemFactory itemFactory, RuneSlotDistributionRegistry runeSlotRegistry) {
+    public AttunementCommand(ClientManager clientManager, ItemFactory itemFactory, RuneSlotDistributionRegistry runeSlotRegistry) {
+        super(clientManager);
         this.itemFactory = itemFactory;
         this.runeSlotRegistry = runeSlotRegistry;
     }
@@ -47,131 +56,83 @@ public class AttunementCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.attunement.description";
+        return "Admin command to attune/unattune items";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        // No args -> open attunement menu
-        if (args.length == 0) {
-            GuiAttunement gui = new GuiAttunement(player, itemFactory, runeSlotRegistry);
-            gui.show(player);
-            return;
-        }
-
-        // Check for --all flag
-        boolean processAll = args[args.length - 1].equalsIgnoreCase("--all");
-        String[] commandArgs = processAll ? java.util.Arrays.copyOf(args, args.length - 1) : args;
-
-        // Validate we have a subcommand after removing --all
-        if (commandArgs.length == 0) {
-            UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.usage");
-            return;
-        }
-
-        if (processAll) {
-            // Process all items in inventory
-            processAllItems(player, commandArgs);
-        } else {
-            // Process held item only
-            ItemStack heldItem = player.getInventory().getItemInMainHand();
-            if (heldItem.getType().isAir()) {
-                UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.holding_item");
-                return;
-            }
-            processItem(player, heldItem, commandArgs, -1);
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.attunement.description");
     }
 
-    /**
-     * Process all items in the player's inventory
-     */
-    private void processAllItems(Player player, String[] args) {
-        int processedCount = 0;
-        ItemStack[] contents = player.getInventory().getContents();
-
-        for (int i = 0; i < contents.length; i++) {
-            ItemStack item = contents[i];
-            if (item != null && !item.getType().isAir()) {
-                if (processItem(player, item, args, i)) {
-                    processedCount++;
-                }
-            }
-        }
-
-        if (processedCount == 0) {
-            UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.no_purity_found");
-        } else {
-            UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.processed", processedCount);
-        }
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    new GuiAttunement(player, itemFactory, runeSlotRegistry).show(player);
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.literal("toggle")
+                        .executes(context -> apply(context, false, attuned -> !attuned))
+                        .then(BrigadierNodes.literal(ALL)
+                                .executes(context -> apply(context, true, attuned -> !attuned))))
+                .then(BrigadierNodes.literal("set")
+                        .then(BrigadierNodes.argument("attuned", BoolArgumentType.bool())
+                                .executes(context -> apply(context, false, attuned -> context.getArgument("attuned", Boolean.class)))
+                                .then(BrigadierNodes.literal(ALL)
+                                        .executes(context -> apply(context, true, attuned -> context.getArgument("attuned", Boolean.class))))));
     }
 
-    /**
-     * Process a single item and optionally update inventory slot
-     *
-     * @param player The player
-     * @param item The item to process
-     * @param args Command arguments
-     * @param slot The inventory slot to update, or -1 for main hand
-     * @return true if item was processed successfully
-     */
-    private boolean processItem(Player player, ItemStack item, String[] args, int slot) {
-        // Convert to ItemInstance
-        Optional<ItemInstance> instanceOpt = itemFactory.fromItemStack(item);
-        if (instanceOpt.isEmpty()) {
-            if (slot == -1) {
-                UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.read_error");
-            }
-            return false;
+    private int apply(CommandContext<CommandSourceStack> context, boolean all, UnaryOperator<Boolean> change) throws CommandSyntaxException {
+        final Player player = getPlayerFromExecutor(context);
+        if (all) {
+            applyToInventory(player, change);
+            return Command.SINGLE_SUCCESS;
         }
-
-        ItemInstance instance = instanceOpt.get();
-
-        // Check for PurityComponent
-        Optional<PurityComponent> purityOpt = instance.getComponent(PurityComponent.class);
-        if (purityOpt.isEmpty()) {
-            if (slot == -1) {
-                UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.no_purity");
-            }
-            return false;
+        final ItemStack held = player.getInventory().getItemInMainHand();
+        if (held.getType().isAir()) {
+            UtilMessage.message(player, PREFIX, "core.command.attune.holding_item");
+            return Command.SINGLE_SUCCESS;
         }
-
-        PurityComponent purity = purityOpt.get();
-
-        // Parse subcommand
-        boolean newAttunedState;
-        String subcommand = args[0].toLowerCase();
-        switch (subcommand) {
-            case "toggle" -> {
-                newAttunedState = !purity.isAttuned();
-            }
-            case "set" -> {
-                if (args.length < 2) {
-                    UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.set.usage");
-                    return false;
-                }
-                newAttunedState = Boolean.parseBoolean(args[1]);
-            }
-            default -> {
-                UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.unknown_subcommand");
-                return false;
-            }
+        final Optional<ItemInstance> instance = itemFactory.fromItemStack(held);
+        if (instance.isEmpty()) {
+            UtilMessage.message(player, PREFIX, "core.command.attune.read_error");
+            return Command.SINGLE_SUCCESS;
         }
+        final Optional<PurityComponent> purity = instance.get().getComponent(PurityComponent.class);
+        if (purity.isEmpty()) {
+            UtilMessage.message(player, PREFIX, "core.command.attune.no_purity");
+            return Command.SINGLE_SUCCESS;
+        }
+        final boolean attuned = change.apply(purity.get().isAttuned());
+        player.getInventory().setItemInMainHand(instance.get().withComponent(purity.get().withAttuned(attuned)).createItemStack());
+        UtilMessage.message(player, PREFIX, "core.command.attune.success",
+                Translations.component(attuned ? "core.command.attune.state.attuned" : "core.command.attune.state.unattuned")
+                        .color(NamedTextColor.YELLOW));
+        return Command.SINGLE_SUCCESS;
+    }
 
-        // Update purity component
-        PurityComponent newPurity = purity.withAttuned(newAttunedState);
-        ItemInstance newInstance = instance.withComponent(newPurity);
-
-        // Replace item in inventory
-        if (slot == -1) {
-            player.getInventory().setItemInMainHand(newInstance.createItemStack());
-            String state = newAttunedState ? "attuned" : "unattuned";
-            UtilMessage.message(player, "core.prefix.attunement", "core.command.attune.success",
-                    Translations.component("core.command.attune.state." + state).color(net.kyori.adventure.text.format.NamedTextColor.YELLOW));
+    private void applyToInventory(Player player, UnaryOperator<Boolean> change) {
+        int processed = 0;
+        final ItemStack[] contents = player.getInventory().getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            final ItemStack item = contents[slot];
+            if (item == null || item.getType().isAir()) {
+                continue;
+            }
+            final Optional<ItemInstance> instance = itemFactory.fromItemStack(item);
+            final Optional<PurityComponent> purity = instance.flatMap(found -> found.getComponent(PurityComponent.class));
+            if (purity.isEmpty()) {
+                continue;
+            }
+            final PurityComponent changed = purity.get().withAttuned(change.apply(purity.get().isAttuned()));
+            player.getInventory().setItem(slot, instance.get().withComponent(changed).createItemStack());
+            processed++;
+        }
+        if (processed == 0) {
+            UtilMessage.message(player, PREFIX, "core.command.attune.no_purity_found");
         } else {
-            player.getInventory().setItem(slot, newInstance.createItemStack());
+            UtilMessage.message(player, PREFIX, "core.command.attune.processed", processed);
         }
-
-        return true;
     }
 }

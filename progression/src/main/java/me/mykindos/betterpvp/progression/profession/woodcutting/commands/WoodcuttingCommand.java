@@ -2,26 +2,37 @@ package me.mykindos.betterpvp.progression.profession.woodcutting.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
+import me.mykindos.betterpvp.progression.profession.woodcutting.WoodcuttingHandler;
 import me.mykindos.betterpvp.progression.profession.skill.ProfessionNodeManager;
 import me.mykindos.betterpvp.progression.profession.skill.menu.WoodcuttingMenu;
-import me.mykindos.betterpvp.progression.profession.woodcutting.WoodcuttingHandler;
 import me.mykindos.betterpvp.progression.profile.ProfessionProfileManager;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
+/**
+ * Opens the executor's woodcutting skill tree, saving their build when it closes.
+ */
 @Singleton
-public class WoodcuttingCommand extends Command {
+public class WoodcuttingCommand extends BrigadierCommand {
 
     private final WoodcuttingHandler woodcuttingHandler;
-    private final ProfessionProfileManager professionProfileManager;
-    private final ProfessionNodeManager progressionSkillManager;
+    private final ProfessionProfileManager profileManager;
+    private final ProfessionNodeManager professionNodeManager;
 
     @Inject
-    public WoodcuttingCommand(WoodcuttingHandler woodcuttingHandler, ProfessionProfileManager professionProfileManager, ProfessionNodeManager progressionSkillManager) {
+    public WoodcuttingCommand(ClientManager clientManager, WoodcuttingHandler woodcuttingHandler, ProfessionProfileManager profileManager,
+                          ProfessionNodeManager professionNodeManager) {
+        super(clientManager);
         this.woodcuttingHandler = woodcuttingHandler;
-        this.professionProfileManager = professionProfileManager;
-        this.progressionSkillManager = progressionSkillManager;
+        this.profileManager = profileManager;
+        this.professionNodeManager = professionNodeManager;
     }
 
     @Override
@@ -31,17 +42,24 @@ public class WoodcuttingCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "progression.command.woodcutting.description";
+        return "Woodcutting! command";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length != 0) return;
+    public Component getDescriptionComponent() {
+        return Translations.component("progression.command.woodcutting.description");
+    }
 
-        professionProfileManager.getObject(player.getUniqueId().toString()).ifPresent(professionProfile -> {
-            new WoodcuttingMenu(woodcuttingHandler, professionProfile, progressionSkillManager).show(player).addCloseHandler(() -> {
-                professionProfileManager.getRepository().updateBuildForGamer(player.getUniqueId(), professionProfile.getProfessionDataMap().get("Woodcutting").getBuild());
-            });
-        });
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    profileManager.getObject(player.getUniqueId().toString()).ifPresent(profile ->
+                            new WoodcuttingMenu(woodcuttingHandler, profile, professionNodeManager).show(player).addCloseHandler(() ->
+                                    profileManager.getRepository().updateBuildForGamer(player.getUniqueId(),
+                                            profile.getProfessionDataMap().get("Woodcutting").getBuild())));
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 }

@@ -2,6 +2,10 @@ package me.mykindos.betterpvp.core.client.punishments.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.List;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.Rank;
@@ -11,12 +15,10 @@ import me.mykindos.betterpvp.core.client.punishments.PunishmentTypes;
 import me.mykindos.betterpvp.core.client.punishments.rules.RuleManager;
 import me.mykindos.betterpvp.core.client.punishments.types.IPunishmentType;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.IConsoleCommand;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.SnowflakeIdGenerator;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
-import me.mykindos.betterpvp.core.locale.Translations;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Bukkit;
@@ -24,26 +26,19 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.ocpsoft.prettytime.PrettyTime;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
-
 @Singleton
 @CustomLog
-@SubCommand(LegacyPunishmentCommand.class)
-public class PunishmentCustomCommand extends Command implements IConsoleCommand {
-
-    private final ClientManager clientManager;
+@BrigadierSubCommand(LegacyPunishmentCommand.class)
+public class PunishmentCustomCommand extends PunishmentSubCommand {
     private final RuleManager ruleManager;
     private final PunishmentRepository punishmentRepository;
 
     @Inject
     public PunishmentCustomCommand(ClientManager clientManager, RuleManager ruleManager, PunishmentRepository punishmentRepository) {
-        this.clientManager = clientManager;
+        super(clientManager);
         this.ruleManager = ruleManager;
         this.punishmentRepository = punishmentRepository;
-        aliases.add("a");
+        getAliases().add("a");
     }
 
     @Override
@@ -53,11 +48,16 @@ public class PunishmentCustomCommand extends Command implements IConsoleCommand 
 
     @Override
     public String getDescription() {
-        return "core.command.punishment-custom.description";
+        return "Add a custom punishment to a player";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.punishment-custom.description");
+    }
+
+    @Override
+    protected void execute(Player player, Client client, String... args) {
         if (args.length < 3) {
             UtilMessage.message(player, "core.prefix.command", "core.command.punishment.custom.usage.player");
             return;
@@ -83,7 +83,7 @@ public class PunishmentCustomCommand extends Command implements IConsoleCommand 
     }
 
     @Override
-    public void execute(CommandSender sender, String[] args) {
+    protected void execute(CommandSender sender, String[] args) {
         if (args.length < 4) {
             UtilMessage.message(sender, "core.prefix.command", "core.command.punishment.custom.usage.console");
             return;
@@ -206,7 +206,7 @@ public class PunishmentCustomCommand extends Command implements IConsoleCommand 
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
+    protected List<String> suggestions(CommandSender sender, String[] args) {
         List<String> tabCompletions = new ArrayList<>();
         if (args.length == 0) return tabCompletions;
 
@@ -225,15 +225,14 @@ public class PunishmentCustomCommand extends Command implements IConsoleCommand 
         return tabCompletions;
     }
 
-    @Override
-    public String getArgumentType(int i) {
+    private String getArgumentType(int i) {
 
         if (i == 1) {
             return "TYPE";
         } else if (i == 2) {
-            return ArgumentType.PLAYER.name();
+            return "PLAYER";
         }
 
-        return ArgumentType.NONE.name();
+        return "NONE";
     }
 }

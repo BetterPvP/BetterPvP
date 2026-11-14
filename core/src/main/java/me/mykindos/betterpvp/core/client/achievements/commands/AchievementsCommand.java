@@ -2,24 +2,32 @@ package me.mykindos.betterpvp.core.client.achievements.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import lombok.CustomLog;
-import me.mykindos.betterpvp.core.client.Client;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.mykindos.betterpvp.core.client.achievements.display.AchievementScopeMenu;
 import me.mykindos.betterpvp.core.client.achievements.repository.AchievementManager;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.client.stats.RealmManager;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.IConsoleCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
+import net.kyori.adventure.text.Component;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
+/**
+ * {@code /achievements} opens the executor's achievements. From the console it prints the loaded achievements.
+ */
 @Singleton
-@CustomLog
-public class AchievementsCommand extends Command implements IConsoleCommand {
+public class AchievementsCommand extends BrigadierCommand {
+
     private final AchievementManager achievementManager;
     private final RealmManager realmManager;
 
     @Inject
-    public AchievementsCommand(AchievementManager achievementManager, RealmManager realmManager) {
+    public AchievementsCommand(ClientManager clientManager, AchievementManager achievementManager, RealmManager realmManager) {
+        super(clientManager);
         this.achievementManager = achievementManager;
         this.realmManager = realmManager;
     }
@@ -31,16 +39,25 @@ public class AchievementsCommand extends Command implements IConsoleCommand {
 
     @Override
     public String getDescription() {
-        return "core.command.achievements.description";
+        return "Show achievements";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        new AchievementScopeMenu(client, achievementManager, realmManager, null).show(player);
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.achievements.description");
     }
 
     @Override
-    public void execute(CommandSender sender, String[] args) {
-        sender.sendMessage(achievementManager.getObjects().toString());
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final CommandSender sender = context.getSource().getSender();
+                    if (!(context.getSource().getExecutor() instanceof Player player)) {
+                        sender.sendMessage(achievementManager.getObjects().toString());
+                        return Command.SINGLE_SUCCESS;
+                    }
+                    new AchievementScopeMenu(getClientFromExecutor(context), achievementManager, realmManager, null).show(player);
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 }

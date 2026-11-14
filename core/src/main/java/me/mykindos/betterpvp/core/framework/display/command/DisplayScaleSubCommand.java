@@ -1,26 +1,41 @@
 package me.mykindos.betterpvp.core.framework.display.command;
 
 import com.google.inject.Inject;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
 import me.mykindos.betterpvp.core.framework.display.DisplayEditorManager;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
-import org.bukkit.command.CommandSender;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Transformation;
 import org.joml.Vector3f;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+/**
+ * {@code /display transform scale <set|add> <x> <y> <z>} sets or adds to the selected display's scale.
+ */
+@Singleton
+@BrigadierSubCommand(DisplayTransformSubCommand.class)
+public class DisplayScaleSubCommand extends BrigadierCommand {
 
-@SubCommand(DisplayTransformSubCommand.class)
-public class DisplayScaleSubCommand extends Command {
+    private final DisplayEditorManager displayEditorManager;
 
     @Inject
-    private DisplayEditorManager displayEditorManager;
+    public DisplayScaleSubCommand(ClientManager clientManager, DisplayEditorManager displayEditorManager) {
+        super(clientManager);
+        this.displayEditorManager = displayEditorManager;
+    }
 
     @Override
     public String getName() {
@@ -29,58 +44,47 @@ public class DisplayScaleSubCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.display-scale.description";
+        return "Scale a display entity";
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        if (args.length == 2) {
-            return List.of("set", "add");
-        } else if (args.length > 4 && args.length < 9) {
-            return List.of("0");
-        }
-        return Collections.emptyList();
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.display-scale.description");
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        args = Arrays.copyOfRange(args, 1, args.length);
-        if (args.length != 4) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.scale.usage");
-            return;
-        }
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.literal("set").then(xyz(true)))
+                .then(BrigadierNodes.literal("add").then(xyz(false)));
+    }
 
+    private RequiredArgumentBuilder<CommandSourceStack, Float> xyz(boolean set) {
+        return BrigadierNodes.argument("x", FloatArgumentType.floatArg())
+                .then(BrigadierNodes.argument("y", FloatArgumentType.floatArg())
+                        .then(BrigadierNodes.argument("z", FloatArgumentType.floatArg())
+                                .executes(context -> apply(context, set))));
+    }
+
+    private int apply(CommandContext<CommandSourceStack> context, boolean set) throws CommandSyntaxException {
+        final Player player = getPlayerFromExecutor(context);
         final Display selectedDisplay = displayEditorManager.getSelectedDisplay(player);
         if (selectedDisplay == null) {
             UtilMessage.message(player, "core.prefix.display", "core.display.not_selecting");
-            return;
+            return Command.SINGLE_SUCCESS;
         }
-
-        final String type = args[0];
-        if (!type.equalsIgnoreCase("add") && !type.equalsIgnoreCase("set")) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.scale.usage");
-            return;
-        }
-
-        final float x, y, z;
-        try {
-            x = Float.parseFloat(args[1]);
-            y = Float.parseFloat(args[2]);
-            z = Float.parseFloat(args[3]);
-        } catch (NumberFormatException e) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.scale.invalid_values");
-            return;
-        }
-
-        final Transformation permutated = selectedDisplay.getTransformation();
-        final Vector3f scale = permutated.getScale();
-        if (type.equalsIgnoreCase("set")) {
-            scale.set(x, y, z);
+        final float x = context.getArgument("x", Float.class);
+        final float y = context.getArgument("y", Float.class);
+        final float z = context.getArgument("z", Float.class);
+        final Transformation transformation = selectedDisplay.getTransformation();
+        final Vector3f vector = transformation.getScale();
+        if (set) {
+            vector.set(x, y, z);
         } else {
-            scale.add(x, y, z);
+            vector.add(x, y, z);
         }
-
-        selectedDisplay.setTransformation(permutated);
+        selectedDisplay.setTransformation(transformation);
         UtilMessage.message(player, "core.prefix.display", "core.display.scale.success");
+        return Command.SINGLE_SUCCESS;
     }
 }

@@ -2,31 +2,38 @@ package me.mykindos.betterpvp.clans.world.ship.command;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.LongArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.List;
 import me.mykindos.betterpvp.clans.world.ship.ShipService;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.List;
-
 /**
- * {@code /ship disable <berth|*> [minutes]} — un-moors a vessel and hands its blocks back, so the dock underneath shows
- * as the builder made it. Omit the minutes to leave it off until {@code /ship enable}.
+ * {@code /ship disable <berth|*> [minutes]} un-moors a vessel and hands its blocks back, so the dock underneath shows
+ * as the builder made it. Without minutes it stays off until {@code /ship enable}.
  */
 @Singleton
-@SubCommand(ShipCommand.class)
-public class ShipDisableSubCommand extends Command {
+@BrigadierSubCommand(ShipCommand.class)
+public class ShipDisableSubCommand extends BrigadierCommand {
 
     private final ShipService ships;
 
     @Inject
-    public ShipDisableSubCommand(@NotNull ShipService ships) {
+    public ShipDisableSubCommand(ClientManager clientManager, @NotNull ShipService ships) {
+        super(clientManager);
         this.ships = ships;
     }
 
@@ -41,52 +48,38 @@ public class ShipDisableSubCommand extends Command {
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 1) {
-            UtilMessage.simpleMessage(player, ShipCommand.PREFIX,
-                    Component.text("Usage: /ship disable <berth|*> [minutes]", NamedTextColor.RED));
-            return;
-        }
-
-        final List<String> berthIds = BerthArgument.resolve(player, ships, args[0]);
-        if (berthIds.isEmpty()) {
-            return;
-        }
-
-        long minutes = 0;
-        if (args.length > 1) {
-            try {
-                minutes = Long.parseLong(args[1]);
-            } catch (NumberFormatException exception) {
-                UtilMessage.simpleMessage(player, ShipCommand.PREFIX, Component.text("'", NamedTextColor.RED)
-                        .append(Component.text(args[1], NamedTextColor.YELLOW))
-                        .append(Component.text("' is not a number of minutes.", NamedTextColor.RED)));
-                return;
-            }
-            if (minutes < 1) {
-                UtilMessage.simpleMessage(player, ShipCommand.PREFIX,
-                        Component.text("Give at least one minute, or no duration at all.", NamedTextColor.RED));
-                return;
-            }
-        }
-
-        ships.disable(player.getWorld(), berthIds, minutes * 60_000L);
-
-        final Component until = minutes > 0
-                ? Component.text(" for " + minutes + " minute(s)", NamedTextColor.GRAY)
-                : Component.text(" until re-enabled", NamedTextColor.GRAY);
-        UtilMessage.simpleMessage(player, ShipCommand.PREFIX, Component.text("Un-moored ", NamedTextColor.GREEN)
-                .append(Component.text(berthIds.size() + " ship(s)", NamedTextColor.YELLOW))
-                .append(until)
-                .append(Component.text(".", NamedTextColor.GREEN)));
+    public Component getDescriptionComponent() {
+        return Translations.component("clans.command.ship.disable.description");
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        if (args.length != 1 || !(sender instanceof Player player)) {
-            return List.of();
-        }
-        return BerthArgument.complete(player, ships, args[0]);
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.literal(BerthArgument.ALL)
+                        .executes(context -> disable(context, BerthArgument.ALL, 0))
+                        .then(BrigadierNodes.argument("minutes", LongArgumentType.longArg(1))
+                                .executes(context -> disable(context, BerthArgument.ALL, context.getArgument("minutes", Long.class)))))
+                .then(BerthArgument.berth(ships)
+                        .executes(context -> disable(context, context.getArgument("berth", String.class), 0))
+                        .then(BrigadierNodes.argument("minutes", LongArgumentType.longArg(1))
+                                .executes(context -> disable(context, context.getArgument("berth", String.class),
+                                        context.getArgument("minutes", Long.class)))));
     }
 
+    /**
+     * @param minutes how long the ship stays off, or 0 to leave it off until re-enabled
+     */
+    private int disable(CommandContext<CommandSourceStack> context, String berth, long minutes) throws CommandSyntaxException {
+        final Player player = getPlayerFromExecutor(context);
+        final List<String> berthIds = BerthArgument.resolve(player, ships, berth);
+        if (berthIds.isEmpty()) {
+            return Command.SINGLE_SUCCESS;
+        }
+        ships.disable(player.getWorld(), berthIds, minutes * 60_000L);
+        final Component count = Component.text(berthIds.size(), NamedTextColor.YELLOW);
+        UtilMessage.message(player, "clans.prefix.ships", minutes > 0
+                ? Translations.component("clans.command.ship.disable.success-timed", count, Component.text(minutes)).color(NamedTextColor.GREEN)
+                : Translations.component("clans.command.ship.disable.success", count).color(NamedTextColor.GREEN));
+        return Command.SINGLE_SUCCESS;
+    }
 }

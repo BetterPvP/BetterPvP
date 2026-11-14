@@ -1,8 +1,10 @@
 package me.mykindos.betterpvp.core.utilities;
 
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import lombok.AccessLevel;
 import lombok.NoArgsConstructor;
 import me.mykindos.betterpvp.core.client.Rank;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.CommandMessages;
 import me.mykindos.betterpvp.core.locale.TranslationService;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.model.tag.CoinsTag;
@@ -27,6 +29,7 @@ import net.kyori.adventure.text.minimessage.tag.Tag;
 import net.kyori.adventure.text.minimessage.tag.resolver.TagResolver;
 import org.bukkit.Bukkit;
 import org.bukkit.Sound;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
 
@@ -261,6 +264,13 @@ public class UtilMessage {
      * @param pageNum The page number that the book will change to when the message is clicked. This is usually the page that the section of the book that this entry corresponds to starts on, but can be any page number.
      * @return A component with a click event that changes the page of a book when clicked, and a hover event that shows "Click to open page X"
      */
+    public static Component tableOfContentsEntry(ComponentLike entry, int pageNum) {
+        return Component.empty().append(Component.empty().color(NamedTextColor.BLACK).decoration(TextDecoration.BOLD, false)
+                        .append(entry).append(Component.text(": " + pageNum))
+                .hoverEvent(HoverEvent.showText(Translations.component("core.util.table_of_contents.hover", Component.text(pageNum))))
+                .clickEvent(ClickEvent.changePage(pageNum)));
+    }
+
     public static Component tableOfContentsEntry(String entryText, int pageNum) {
         return Component.empty().append(UtilMessage.deserialize("<reset><black>" + entryText + ": " + pageNum).decoration(TextDecoration.BOLD, false)
                 .hoverEvent(HoverEvent.showText(Translations.component("core.util.table_of_contents.hover", Component.text(pageNum))))
@@ -327,6 +337,10 @@ public class UtilMessage {
      */
     public static void broadcast(Component message) {
         Bukkit.getServer().broadcast(message);
+    }
+
+    public static void sendCommandSyntaxException(CommandSender sender, CommandSyntaxException exception) {
+        sender.sendMessage(CommandMessages.component(exception.getRawMessage()).color(NamedTextColor.RED));
     }
 
     /**

@@ -2,22 +2,33 @@ package me.mykindos.betterpvp.core.scene.command;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.scene.SceneObjectRegistry;
 import me.mykindos.betterpvp.core.scene.npc.NPC;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
-import org.bukkit.entity.Player;
+import net.kyori.adventure.text.Component;
+import org.bukkit.command.CommandSender;
 
+/**
+ * {@code /npc remove <id>} removes one NPC by its id.
+ */
 @Singleton
-@SubCommand(NPCCommand.class)
-public class NPCRemoveCommand extends Command {
+@BrigadierSubCommand(NPCCommand.class)
+public class NPCRemoveCommand extends BrigadierCommand {
 
     private final SceneObjectRegistry registry;
 
     @Inject
-    private NPCRemoveCommand(SceneObjectRegistry registry) {
+    public NPCRemoveCommand(ClientManager clientManager, SceneObjectRegistry registry) {
+        super(clientManager);
         this.registry = registry;
     }
 
@@ -28,31 +39,33 @@ public class NPCRemoveCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.n-p-c-remove.description";
+        return "Removes an NPC";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 1) {
-            UtilMessage.message(player, "core.prefix.command", "core.command.npc.remove.usage");
-            return;
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.n-p-c-remove.description");
+    }
 
-        int id;
-        try {
-            id = Integer.parseInt(args[0]);
-        } catch (NumberFormatException e) {
-            UtilMessage.message(player, "core.prefix.command", "core.command.npc.remove.id.invalid", net.kyori.adventure.text.Component.text(args[0]));
-            return;
-        }
-
-        final NPC npc = registry.getObject(id, NPC.class);
-        if (npc == null) {
-            UtilMessage.message(player, "core.prefix.command", "core.command.npc.remove.not_found", net.kyori.adventure.text.Component.text(id));
-            return;
-        }
-
-        npc.remove();
-        UtilMessage.message(player, "core.prefix.command", "core.command.npc.remove.success", net.kyori.adventure.text.Component.text(id));
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("id", IntegerArgumentType.integer())
+                        .suggests((context, builder) -> {
+                            registry.getObjects(NPC.class).forEach(npc -> builder.suggest(npc.getId()));
+                            return builder.buildFuture();
+                        })
+                        .executes(context -> {
+                            final CommandSender sender = context.getSource().getSender();
+                            final int id = context.getArgument("id", Integer.class);
+                            final NPC npc = registry.getObject(id, NPC.class);
+                            if (npc == null) {
+                                UtilMessage.message(sender, "core.prefix.command", "core.command.npc.remove.not_found", Component.text(id));
+                                return Command.SINGLE_SUCCESS;
+                            }
+                            npc.remove();
+                            UtilMessage.message(sender, "core.prefix.command", "core.command.npc.remove.success", Component.text(id));
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 }

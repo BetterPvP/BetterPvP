@@ -2,28 +2,34 @@ package me.mykindos.betterpvp.clans.clans.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.concurrent.atomic.AtomicInteger;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.utilities.ClansNamespacedKeys;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
 import me.mykindos.betterpvp.core.framework.CoreNamespaceKeys;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Chunk;
-import org.bukkit.entity.Player;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 
-import java.util.concurrent.atomic.AtomicInteger;
-
+/**
+ * Writes each claimed chunk's clan id into the chunk's persistent data, and clears its block tags.
+ */
 @Singleton
-public class ChunkPDCCommand extends Command {
+public class ChunkPDCCommand extends BrigadierCommand {
 
     private final ClanManager clanManager;
 
     @Inject
-    public ChunkPDCCommand(ClanManager clanManager) {
+    public ChunkPDCCommand(ClientManager clientManager, ClanManager clanManager) {
+        super(clientManager);
         this.clanManager = clanManager;
     }
 
@@ -34,23 +40,28 @@ public class ChunkPDCCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "clans.command.chunk-p-d-c.description";
+        return "Assigns PDC to all clan chunks";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("clans.command.chunk-p-d-c.description");
+    }
 
-        AtomicInteger count = new AtomicInteger();
-        clanManager.getObjects().values().forEach(clan -> {
-            clan.getTerritory().forEach(clanTerritory -> {
-                Chunk chunk = clanTerritory.getWorldChunk();
-                PersistentDataContainer persistentDataContainer = chunk.getPersistentDataContainer();
-                persistentDataContainer.set(ClansNamespacedKeys.CLAN, PersistentDataType.LONG, clan.getId());
-                persistentDataContainer.remove(CoreNamespaceKeys.BLOCK_TAG_CONTAINER_KEY);
-                count.getAndIncrement();
-            });
-        });
-
-        UtilMessage.message(player, "clans.prefix", "clans.command.chunk-pdc.success", Component.text(count.get(), NamedTextColor.YELLOW));
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final AtomicInteger count = new AtomicInteger();
+                    clanManager.getObjects().values().forEach(clan -> clan.getTerritory().forEach(territory -> {
+                        final PersistentDataContainer data = territory.getWorldChunk().getPersistentDataContainer();
+                        data.set(ClansNamespacedKeys.CLAN, PersistentDataType.LONG, clan.getId());
+                        data.remove(CoreNamespaceKeys.BLOCK_TAG_CONTAINER_KEY);
+                        count.getAndIncrement();
+                    }));
+                    UtilMessage.message(context.getSource().getSender(), "clans.prefix", "clans.command.chunk-pdc.success",
+                            Component.text(count.get(), NamedTextColor.YELLOW));
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 }

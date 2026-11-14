@@ -2,30 +2,47 @@ package me.mykindos.betterpvp.core.chat.filter.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Set;
 import me.mykindos.betterpvp.core.chat.filter.IFilterService;
 import me.mykindos.betterpvp.core.chat.filter.impl.DatabaseFilterService;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
-import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
 import me.mykindos.betterpvp.core.locale.Translations;
+import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.entity.Player;
+import org.bukkit.command.CommandSender;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
+/**
+ * {@code /chatfilter} manages the words the general chat filter blocks: {@code add}, {@code remove}, {@code list} and
+ * {@code reload}.
+ */
 @Singleton
-public class ChatFilterCommand extends Command {
+public class ChatFilterCommand extends BrigadierCommand {
 
-    private final IFilterService filterService;
+    static final String PREFIX = "core.prefix.command";
 
     @Inject
-    public ChatFilterCommand(IFilterService filterService) {
-        this.filterService = filterService;
+    public ChatFilterCommand(ClientManager clientManager) {
+        super(clientManager);
+    }
+
+    /**
+     * Lists filtered words under a header, one per line in alphabetical order.
+     */
+    static Component wordList(String headerKey, Set<String> words) {
+        Component message = Translations.component(headerKey).color(NamedTextColor.GREEN);
+        for (String word : words.stream().sorted().toList()) {
+            message = message.appendNewline().append(Component.text("- ", NamedTextColor.GRAY))
+                    .append(Component.text(word, NamedTextColor.YELLOW));
+        }
+        return message;
     }
 
     @Override
@@ -35,27 +52,32 @@ public class ChatFilterCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.chat-filter.description";
+        return "Manage general chat filter words";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.usage");
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.chat-filter.description");
     }
 
     @Override
-    public Rank getRequiredRank() {
-        return Rank.ADMIN;
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    UtilMessage.message(context.getSource().getSender(), PREFIX, "core.command.chatfilter.usage");
+                    return Command.SINGLE_SUCCESS;
+                });
     }
-
 
     @Singleton
-    @SubCommand(ChatFilterCommand.class)
-    public static class ChatFilterAddCommand extends Command {
+    @BrigadierSubCommand(ChatFilterCommand.class)
+    public static class ChatFilterAddCommand extends BrigadierCommand {
+
         private final IFilterService filterService;
 
         @Inject
-        public ChatFilterAddCommand(IFilterService filterService) {
+        public ChatFilterAddCommand(ClientManager clientManager, IFilterService filterService) {
+            super(clientManager);
             this.filterService = filterService;
         }
 
@@ -66,37 +88,38 @@ public class ChatFilterCommand extends Command {
 
         @Override
         public String getDescription() {
-        return "core.command.chat-filter-add.description";
-    }
+            return "Add a word to the chat filter list";
+        }
 
         @Override
-        public void execute(Player player, Client client, String... args) {
-            if (args.length < 1) {
-                UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.add.usage");
-                return;
-            }
+        public Component getDescriptionComponent() {
+            return Translations.component("core.command.chat-filter-add.description");
+        }
 
-            String word = String.join(" ", args).toLowerCase();
-
-            filterService.addFilteredWord(word).thenAccept(success -> {
-                if (success) {
-                    UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.add.success",
-                            Component.text(word, NamedTextColor.YELLOW));
-                } else {
-                    UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.add.exists",
-                            Component.text(word, NamedTextColor.YELLOW));
-                }
-            });
+        @Override
+        public LiteralArgumentBuilder<CommandSourceStack> define() {
+            return BrigadierNodes.literal(getName())
+                    .then(BrigadierNodes.argument("word", StringArgumentType.greedyString())
+                            .executes(context -> {
+                                final CommandSender sender = context.getSource().getSender();
+                                final String word = context.getArgument("word", String.class).toLowerCase();
+                                filterService.addFilteredWord(word).thenAccept(success -> UtilMessage.message(sender, PREFIX,
+                                        success ? "core.command.chatfilter.add.success" : "core.command.chatfilter.add.exists",
+                                        Component.text(word, NamedTextColor.YELLOW)));
+                                return Command.SINGLE_SUCCESS;
+                            }));
         }
     }
 
     @Singleton
-    @SubCommand(ChatFilterCommand.class)
-    public static class ChatFilterRemoveCommand extends Command {
+    @BrigadierSubCommand(ChatFilterCommand.class)
+    public static class ChatFilterRemoveCommand extends BrigadierCommand {
+
         private final IFilterService filterService;
 
         @Inject
-        public ChatFilterRemoveCommand(IFilterService filterService) {
+        public ChatFilterRemoveCommand(ClientManager clientManager, IFilterService filterService) {
+            super(clientManager);
             this.filterService = filterService;
         }
 
@@ -107,37 +130,45 @@ public class ChatFilterCommand extends Command {
 
         @Override
         public String getDescription() {
-        return "core.command.chat-filter-remove.description";
-    }
+            return "Remove a word from the chat filter list";
+        }
 
         @Override
-        public void execute(Player player, Client client, String... args) {
-            if (args.length < 1) {
-                UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.remove.usage");
-                return;
-            }
+        public Component getDescriptionComponent() {
+            return Translations.component("core.command.chat-filter-remove.description");
+        }
 
-            String word = args[0].toLowerCase();
-
-            filterService.removeFilteredWord(word).thenAccept(success -> {
-                if (success) {
-                    UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.remove.success",
-                            Component.text(word, NamedTextColor.YELLOW));
-                } else {
-                    UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.remove.notfound",
-                            Component.text(word, NamedTextColor.YELLOW));
-                }
-            });
+        @Override
+        public LiteralArgumentBuilder<CommandSourceStack> define() {
+            return BrigadierNodes.literal(getName())
+                    .then(BrigadierNodes.argument("word", StringArgumentType.greedyString())
+                            .suggests((context, builder) -> {
+                                filterService.getFilteredWords().stream()
+                                        .filter(word -> word.startsWith(builder.getRemainingLowerCase()))
+                                        .sorted()
+                                        .forEach(builder::suggest);
+                                return builder.buildFuture();
+                            })
+                            .executes(context -> {
+                                final CommandSender sender = context.getSource().getSender();
+                                final String word = context.getArgument("word", String.class).toLowerCase();
+                                filterService.removeFilteredWord(word).thenAccept(success -> UtilMessage.message(sender, PREFIX,
+                                        success ? "core.command.chatfilter.remove.success" : "core.command.chatfilter.remove.notfound",
+                                        Component.text(word, NamedTextColor.YELLOW)));
+                                return Command.SINGLE_SUCCESS;
+                            }));
         }
     }
 
     @Singleton
-    @SubCommand(ChatFilterCommand.class)
-    public static class ChatFilterListCommand extends Command {
+    @BrigadierSubCommand(ChatFilterCommand.class)
+    public static class ChatFilterListCommand extends BrigadierCommand {
+
         private final IFilterService filterService;
 
         @Inject
-        public ChatFilterListCommand(IFilterService filterService) {
+        public ChatFilterListCommand(ClientManager clientManager, IFilterService filterService) {
+            super(clientManager);
             this.filterService = filterService;
         }
 
@@ -148,38 +179,39 @@ public class ChatFilterCommand extends Command {
 
         @Override
         public String getDescription() {
-        return "core.command.chat-filter-list.description";
-    }
+            return "List all chat filtered words";
+        }
 
         @Override
-        public void execute(Player player, Client client, String... args) {
-            Set<String> filteredWords = filterService.getFilteredWords();
+        public Component getDescriptionComponent() {
+            return Translations.component("core.command.chat-filter-list.description");
+        }
 
-            if (filteredWords.isEmpty()) {
-                UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.list.empty");
-                return;
-            }
-
-            Component message = Translations.component("core.command.chatfilter.list.header").color(NamedTextColor.GREEN);
-            List<String> sortedWords = new ArrayList<>(filteredWords);
-            sortedWords.sort(String::compareTo);
-
-            for (String word : sortedWords) {
-                message = message.appendNewline().append(Component.text("- ", NamedTextColor.GRAY))
-                        .append(Component.text(word, NamedTextColor.YELLOW));
-            }
-
-            UtilMessage.message(player, COMMAND_PREFIX, message);
+        @Override
+        public LiteralArgumentBuilder<CommandSourceStack> define() {
+            return BrigadierNodes.literal(getName())
+                    .executes(context -> {
+                        final CommandSender sender = context.getSource().getSender();
+                        final Set<String> filteredWords = filterService.getFilteredWords();
+                        if (filteredWords.isEmpty()) {
+                            UtilMessage.message(sender, PREFIX, "core.command.chatfilter.list.empty");
+                            return Command.SINGLE_SUCCESS;
+                        }
+                        UtilMessage.message(sender, PREFIX, wordList("core.command.chatfilter.list.header", filteredWords));
+                        return Command.SINGLE_SUCCESS;
+                    });
         }
     }
 
     @Singleton
-    @SubCommand(ChatFilterCommand.class)
-    public static class ChatFilterReloadCommand extends Command {
+    @BrigadierSubCommand(ChatFilterCommand.class)
+    public static class ChatFilterReloadCommand extends BrigadierCommand {
+
         private final IFilterService filterService;
 
         @Inject
-        public ChatFilterReloadCommand(IFilterService filterService) {
+        public ChatFilterReloadCommand(ClientManager clientManager, IFilterService filterService) {
+            super(clientManager);
             this.filterService = filterService;
         }
 
@@ -190,15 +222,24 @@ public class ChatFilterCommand extends Command {
 
         @Override
         public String getDescription() {
-        return "core.command.chat-filter-reload.description";
-    }
+            return "Reload the chat filter list from the database";
+        }
 
         @Override
-        public void execute(Player player, Client client, String... args) {
-            if (filterService instanceof DatabaseFilterService databaseFilterService) {
-                databaseFilterService.loadFilteredWords();
-                UtilMessage.message(player, COMMAND_PREFIX, "core.command.chatfilter.reload.done");
-            }
+        public Component getDescriptionComponent() {
+            return Translations.component("core.command.chat-filter-reload.description");
+        }
+
+        @Override
+        public LiteralArgumentBuilder<CommandSourceStack> define() {
+            return BrigadierNodes.literal(getName())
+                    .executes(context -> {
+                        if (filterService instanceof DatabaseFilterService databaseFilterService) {
+                            databaseFilterService.loadFilteredWords();
+                            UtilMessage.message(context.getSource().getSender(), PREFIX, "core.command.chatfilter.reload.done");
+                        }
+                        return Command.SINGLE_SUCCESS;
+                    });
         }
     }
 }

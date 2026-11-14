@@ -2,29 +2,32 @@ package me.mykindos.betterpvp.core.chat.filter.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Set;
 import me.mykindos.betterpvp.core.chat.filter.ShadowChatFilterManager;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.entity.Player;
+import org.bukkit.command.CommandSender;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Set;
-
+/**
+ * {@code /shadowfilter} manages the shadow filter's words: {@code add}, {@code remove}, {@code list} and
+ * {@code reload}.
+ */
 @Singleton
-public class ShadowFilterCommand extends Command {
-
-    private final ShadowChatFilterManager filterManager;
+public class ShadowFilterCommand extends BrigadierCommand {
 
     @Inject
-    public ShadowFilterCommand(ShadowChatFilterManager filterManager) {
-        this.filterManager = filterManager;
+    public ShadowFilterCommand(ClientManager clientManager) {
+        super(clientManager);
     }
 
     @Override
@@ -34,27 +37,32 @@ public class ShadowFilterCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.shadow-filter.description";
+        return "Manage shadow chat filter words";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.usage");
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.shadow-filter.description");
     }
 
     @Override
-    public Rank getRequiredRank() {
-        return Rank.ADMIN;
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    UtilMessage.message(context.getSource().getSender(), ChatFilterCommand.PREFIX, "core.command.shadowfilter.usage");
+                    return Command.SINGLE_SUCCESS;
+                });
     }
-
 
     @Singleton
-    @SubCommand(ShadowFilterCommand.class)
-    public static class ShadowFilterAddCommand extends Command {
+    @BrigadierSubCommand(ShadowFilterCommand.class)
+    public static class ShadowFilterAddCommand extends BrigadierCommand {
+
         private final ShadowChatFilterManager filterManager;
 
         @Inject
-        public ShadowFilterAddCommand(ShadowChatFilterManager filterManager) {
+        public ShadowFilterAddCommand(ClientManager clientManager, ShadowChatFilterManager filterManager) {
+            super(clientManager);
             this.filterManager = filterManager;
         }
 
@@ -65,35 +73,39 @@ public class ShadowFilterCommand extends Command {
 
         @Override
         public String getDescription() {
-        return "core.command.shadow-filter-add.description";
-    }
+            return "Add a word to the shadow filter list";
+        }
 
         @Override
-        public void execute(Player player, Client client, String... args) {
-            if (args.length < 1) {
-                UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.add.usage");
-                return;
-            }
+        public Component getDescriptionComponent() {
+            return Translations.component("core.command.shadow-filter-add.description");
+        }
 
-            String word = String.join(" ", args).toLowerCase();
-
-            filterManager.addFilteredWord(word, client).thenAccept(success -> {
-                if (success) {
-                    UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.add.success", Component.text(word));
-                } else {
-                    UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.add.exists", Component.text(word));
-                }
-            });
+        @Override
+        public LiteralArgumentBuilder<CommandSourceStack> define() {
+            return BrigadierNodes.literal(getName())
+                    .then(BrigadierNodes.argument("word", StringArgumentType.greedyString())
+                            .executes(context -> {
+                                final CommandSender sender = context.getSource().getSender();
+                                final String word = context.getArgument("word", String.class).toLowerCase();
+                                filterManager.addFilteredWord(word, getClientFromExecutor(context)).thenAccept(success ->
+                                        UtilMessage.message(sender, ChatFilterCommand.PREFIX,
+                                                success ? "core.command.shadowfilter.add.success" : "core.command.shadowfilter.add.exists",
+                                                Component.text(word)));
+                                return Command.SINGLE_SUCCESS;
+                            }));
         }
     }
 
     @Singleton
-    @SubCommand(ShadowFilterCommand.class)
-    public static class ShadowFilterRemoveCommand extends Command {
+    @BrigadierSubCommand(ShadowFilterCommand.class)
+    public static class ShadowFilterRemoveCommand extends BrigadierCommand {
+
         private final ShadowChatFilterManager filterManager;
 
         @Inject
-        public ShadowFilterRemoveCommand(ShadowChatFilterManager filterManager) {
+        public ShadowFilterRemoveCommand(ClientManager clientManager, ShadowChatFilterManager filterManager) {
+            super(clientManager);
             this.filterManager = filterManager;
         }
 
@@ -104,35 +116,45 @@ public class ShadowFilterCommand extends Command {
 
         @Override
         public String getDescription() {
-        return "core.command.shadow-filter-remove.description";
-    }
+            return "Remove a word from the shadow filter list";
+        }
 
         @Override
-        public void execute(Player player, Client client, String... args) {
-            if (args.length < 1) {
-                UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.remove.usage");
-                return;
-            }
+        public Component getDescriptionComponent() {
+            return Translations.component("core.command.shadow-filter-remove.description");
+        }
 
-            String word = args[0].toLowerCase();
-
-            filterManager.removeFilteredWord(word).thenAccept(success -> {
-                if (success) {
-                    UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.remove.success", Component.text(word));
-                } else {
-                    UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.remove.not_found", Component.text(word));
-                }
-            });
+        @Override
+        public LiteralArgumentBuilder<CommandSourceStack> define() {
+            return BrigadierNodes.literal(getName())
+                    .then(BrigadierNodes.argument("word", StringArgumentType.greedyString())
+                            .suggests((context, builder) -> {
+                                filterManager.getFilteredWords().stream()
+                                        .filter(word -> word.startsWith(builder.getRemainingLowerCase()))
+                                        .sorted()
+                                        .forEach(builder::suggest);
+                                return builder.buildFuture();
+                            })
+                            .executes(context -> {
+                                final CommandSender sender = context.getSource().getSender();
+                                final String word = context.getArgument("word", String.class).toLowerCase();
+                                filterManager.removeFilteredWord(word).thenAccept(success -> UtilMessage.message(sender, ChatFilterCommand.PREFIX,
+                                        success ? "core.command.shadowfilter.remove.success" : "core.command.shadowfilter.remove.not_found",
+                                        Component.text(word)));
+                                return Command.SINGLE_SUCCESS;
+                            }));
         }
     }
 
     @Singleton
-    @SubCommand(ShadowFilterCommand.class)
-    public static class ShadowFilterListCommand extends Command {
+    @BrigadierSubCommand(ShadowFilterCommand.class)
+    public static class ShadowFilterListCommand extends BrigadierCommand {
+
         private final ShadowChatFilterManager filterManager;
 
         @Inject
-        public ShadowFilterListCommand(ShadowChatFilterManager filterManager) {
+        public ShadowFilterListCommand(ClientManager clientManager, ShadowChatFilterManager filterManager) {
+            super(clientManager);
             this.filterManager = filterManager;
         }
 
@@ -143,38 +165,40 @@ public class ShadowFilterCommand extends Command {
 
         @Override
         public String getDescription() {
-        return "core.command.shadow-filter-list.description";
-    }
+            return "List all shadow filtered words";
+        }
 
         @Override
-        public void execute(Player player, Client client, String... args) {
-            Set<String> filteredWords = filterManager.getFilteredWords();
+        public Component getDescriptionComponent() {
+            return Translations.component("core.command.shadow-filter-list.description");
+        }
 
-            if (filteredWords.isEmpty()) {
-                UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.list.empty");
-                return;
-            }
-
-            Component message = Translations.component("core.command.shadowfilter.list.header").color(NamedTextColor.GREEN);
-            List<String> sortedWords = new ArrayList<>(filteredWords);
-            sortedWords.sort(String::compareTo);
-
-            for (String word : sortedWords) {
-                message = message.appendNewline().append(Component.text("- ", NamedTextColor.GRAY))
-                        .append(Component.text(word, NamedTextColor.YELLOW));
-            }
-
-            UtilMessage.message(player, "core.prefix.command", message);
+        @Override
+        public LiteralArgumentBuilder<CommandSourceStack> define() {
+            return BrigadierNodes.literal(getName())
+                    .executes(context -> {
+                        final CommandSender sender = context.getSource().getSender();
+                        final Set<String> filteredWords = filterManager.getFilteredWords();
+                        if (filteredWords.isEmpty()) {
+                            UtilMessage.message(sender, ChatFilterCommand.PREFIX, "core.command.shadowfilter.list.empty");
+                            return Command.SINGLE_SUCCESS;
+                        }
+                        UtilMessage.message(sender, ChatFilterCommand.PREFIX,
+                                ChatFilterCommand.wordList("core.command.shadowfilter.list.header", filteredWords));
+                        return Command.SINGLE_SUCCESS;
+                    });
         }
     }
 
     @Singleton
-    @SubCommand(ShadowFilterCommand.class)
-    public static class ShadowFilterReloadCommand extends Command {
+    @BrigadierSubCommand(ShadowFilterCommand.class)
+    public static class ShadowFilterReloadCommand extends BrigadierCommand {
+
         private final ShadowChatFilterManager filterManager;
 
         @Inject
-        public ShadowFilterReloadCommand(ShadowChatFilterManager filterManager) {
+        public ShadowFilterReloadCommand(ClientManager clientManager, ShadowChatFilterManager filterManager) {
+            super(clientManager);
             this.filterManager = filterManager;
         }
 
@@ -185,13 +209,22 @@ public class ShadowFilterCommand extends Command {
 
         @Override
         public String getDescription() {
-        return "core.command.shadow-filter-reload.description";
-    }
+            return "Reload the shadow filter list from the database";
+        }
 
         @Override
-        public void execute(Player player, Client client, String... args) {
-            filterManager.loadFilteredWords();
-            UtilMessage.message(player, "core.prefix.command", "core.command.shadowfilter.reload.done");
+        public Component getDescriptionComponent() {
+            return Translations.component("core.command.shadow-filter-reload.description");
+        }
+
+        @Override
+        public LiteralArgumentBuilder<CommandSourceStack> define() {
+            return BrigadierNodes.literal(getName())
+                    .executes(context -> {
+                        filterManager.loadFilteredWords();
+                        UtilMessage.message(context.getSource().getSender(), ChatFilterCommand.PREFIX, "core.command.shadowfilter.reload.done");
+                        return Command.SINGLE_SUCCESS;
+                    });
         }
     }
 }

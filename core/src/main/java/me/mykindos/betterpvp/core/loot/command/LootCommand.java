@@ -2,30 +2,37 @@ package me.mykindos.betterpvp.core.loot.command;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import lombok.CustomLog;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.loot.LootTable;
 import me.mykindos.betterpvp.core.loot.LootTableRegistry;
 import me.mykindos.betterpvp.core.loot.menu.LootTableMenu;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
-import org.bukkit.command.CommandSender;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * {@code /loot <table>} opens a loaded loot table's contents.
+ */
 @Singleton
 @CustomLog
-public class LootCommand extends Command {
+public class LootCommand extends BrigadierCommand {
 
     private final LootTableRegistry lootTableRegistry;
 
     @Inject
-    private LootCommand(LootTableRegistry lootTableRegistry) {
+    public LootCommand(ClientManager clientManager, LootTableRegistry lootTableRegistry) {
+        super(clientManager);
         this.lootTableRegistry = lootTableRegistry;
-        this.aliases.add("droptable");
-        this.aliases.add("loottable");
+        getAliases().add("droptable");
+        getAliases().add("loottable");
     }
 
     @Override
@@ -35,32 +42,36 @@ public class LootCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.loot.description";
+        return "View a specific loot table";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if(args.length == 0) {
-            UtilMessage.message(player, "core.prefix.command", "core.command.loot.usage");
-            return;
-        }
-
-        LootTable table = lootTableRegistry.getLoaded().get(args[0]);
-        if (table == null) {
-            UtilMessage.message(player, "core.prefix.command", "core.command.loot.not_found");
-            return;
-        }
-
-        log.info("{} opened the loot table for {}", player.getName(), args[0]).submit();
-        new LootTableMenu(table, null).show(player);
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.loot.description");
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        if (args.length == 1) {
-            return new ArrayList<>(lootTableRegistry.getLoaded().keySet().stream().filter(s -> s.toLowerCase().startsWith(args[0].toLowerCase())).toList());
-        } else {
-            return super.processTabComplete(sender, args);
-        }
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        // Loot table ids are namespaced keys, so a single word cannot hold them
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("table", StringArgumentType.greedyString())
+                        .suggests((context, builder) -> {
+                            lootTableRegistry.getLoaded().keySet().stream()
+                                    .filter(id -> id.toLowerCase().startsWith(builder.getRemainingLowerCase()))
+                                    .forEach(builder::suggest);
+                            return builder.buildFuture();
+                        })
+                        .executes(context -> {
+                            final Player player = getPlayerFromExecutor(context);
+                            final String id = context.getArgument("table", String.class);
+                            final LootTable table = lootTableRegistry.getLoaded().get(id);
+                            if (table == null) {
+                                UtilMessage.message(player, "core.prefix.command", "core.command.loot.not_found");
+                                return Command.SINGLE_SUCCESS;
+                            }
+                            log.info("{} opened the loot table for {}", player.getName(), id).submit();
+                            new LootTableMenu(table, null).show(player);
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 }

@@ -1,0 +1,402 @@
+testcommand:
+  requiredRank: ADMIN
+  enabled: true
+search:
+  requiredRank: ADMIN
+  enabled: true
+customeffect:
+  requiredRank: ADMIN
+  enabled: true
+daily:
+  requiredRank: PLAYER
+  enabled: true
+discord:
+  requiredRank: PLAYER
+  enabled: true
+ignore:
+  requiredRank: PLAYER
+  enabled: true
+kill:
+  requiredRank: PLAYER
+  enabled: true
+list:
+  requiredRank: ADMIN
+  enabled: true
+message:
+  requiredRank: PLAYER
+  enabled: true
+ping:
+  requiredRank: PLAYER
+  enabled: true
+playtime:
+  requiredRank: PLAYER
+  enabled: true
+admin:
+  requiredRank: PLAYER
+  enabled: true
+reply:
+  requiredRank: PLAYER
+  enabled: true
+showeffects:
+  requiredRank: PLAYER
+  enabled: true
+showitem:
+  requiredRank: PLAYER
+  enabled: true
+spawn:
+  requiredRank: ADMIN
+  enabled: true
+centerself:
+  requiredRank: ADMIN
+  enabled: true
+clear:
+  requiredRank: ADMIN
+  enabled: true
+gamemode:
+  requiredRank: ADMIN
+  enabled: true
+heal:
+  requiredRank: ADMIN
+  enabled: true
+setviewdistance:
+  requiredRank: ADMIN
+  enabled: true
+teleport:
+  requiredRank: ADMIN
+  enabled: true
+teleporthere:
+  requiredRank: ADMIN
+  enabled: true
+teleportposition:
+  requiredRank: ADMIN
+  enabled: true
+teleportworld:
+  requiredRank: ADMIN
+  enabled: true
+world:
+  requiredRank: ADMIN
+  enabled: true
+messageadmin:
+  requiredRank: HELPER
+  enabled: true
+replyadmin:
+  requiredRank: HELPER
+  enabled: true
+vanish:
+  requiredRank: ADMIN
+  enabled: true
+broadcast:
+  requiredRank: ADMIN
+  enabled: true
+freeze:
+  requiredRank: ADMIN
+  enabled: true
+invsee:
+  requiredRank: ADMIN
+  enabled: true
+iteminfo:
+  requiredRank: ADMIN
+  enabled: true
+kick:
+  requiredRank: ADMIN
+  enabled: true
+logpurge:
+  requiredRank: DEVELOPER
+  enabled: true
+setspawn:
+  requiredRank: ADMIN
+  enabled: true
+staffchat:
+  requiredRank: TRIAL_MOD
+  enabled: true
+core:
+  requiredRank: ADMIN
+  enabled: true
+zone:
+  requiredRank: ADMIN
+  enabled: true
+  list:
+    requiredRank: ADMIN
+    enabled: true
+  discovery:
+    requiredRank: ADMIN
+    enabled: true
+    add:
+      requiredRank: ADMIN
+      enabled: true
+    list:
+      requiredRank: ADMIN
+      enabled: true
+    remove:
+      requiredRank: ADMIN
+      enabled: true
+    reset:
+      requiredRank: ADMIN
+      enabled: true
+site:
+  requiredRank: ADMIN
+  enabled: true
+  list:
+    requiredRank: ADMIN
+    enabled: true
+  create:
+    requiredRank: ADMIN
+    enabled: true
+  tp:
+    requiredRank: ADMIN
+    enabled: true
+  delete:
+    requiredRank: ADMIN
+    enabled: true
+leavesite:
+  requiredRank: PLAYER
+  enabled: true
+structure:
+  requiredRank: ADMIN
+  enabled: true
+  save:
+    requiredRank: ADMIN
+    enabled: true
+  paste:
+    requiredRank: ADMIN
+    enabled: true
+  layers:
+    requiredRank: ADMIN
+    enabled: true
+  undo:
+    requiredRank: ADMIN
+    enabled: true
+display:
+  requiredRank: ADMIN
+  enabled: true
+  summon:
+    requiredRank: ADMIN
+    enabled: true
+  select:
+    requiredRank: ADMIN
+    enabled: true
+  deselect:
+    requiredRank: ADMIN
+    enabled: true
+  remove:
+    requiredRank: ADMIN
+    enabled: true
+  interpolation:
+    requiredRank: ADMIN
+    enabled: true
+  transform:
+    requiredRank: ADMIN
+    enabled: true
+    rotate:
+      requiredRank: ADMIN
+      enabled: true
+    scale:
+      requiredRank: ADMIN
+      enabled: true
+    translate:
+      requiredRank: ADMIN
+      enabled: true
+silencechat:
+  requiredRank: MODERATOR
+  enabled: true
+chatfilter:
+  requiredRank: MODERATOR
+  enabled: true
+  add:
+    requiredRank: ADMIN
+    enabled: true
+  remove:
+    requiredRank: ADMIN
+    enabled: true
+  list:
+    requiredRank: MODERATOR
+    enabled: true
+  reload:
+    requiredRank: ADMIN
+    enabled: true
+shadowfilter:
+  requiredRank: ADMIN
+  enabled: true
+  add:
+    requiredRank: ADMIN
+    enabled: true
+  remove:
+    requiredRank: ADMIN
+    enabled: true
+  list:
+    requiredRank: ADMIN
+    enabled: true
+  reload:
+    requiredRank: ADMIN
+    enabled: true
+logout:
+  requiredRank: PLAYER
+  enabled: true
+settings:
+  requiredRank: PLAYER
+  enabled: true
+leaderboard:
+  requiredRank: PLAYER
+  enabled: true
+tip:
+  requiredRank: PLAYER
+  enabled: true
+sendtip:
+  requiredRank: ADMIN
+  enabled: true
+loadpack:
+  requiredRank: ADMIN
+  enabled: true
+unloadpack:
+  requiredRank: ADMIN
+  enabled: true
+items:
+  requiredRank: PLAYER
+  enabled: true
+reforge:
+  requiredRank: ADMIN
+  enabled: true
+refreshitemcache:
+  requiredRank: ADMIN
+  enabled: true
+mockitem:
+  requiredRank: ADMIN
+  enabled: true
+loot:
+  requiredRank: PLAYER
+  enabled: true
+npc:
+  requiredRank: ADMIN
+  enabled: true
+  spawn:
+    requiredRank: ADMIN
+    enabled: true
+  remove:
+    requiredRank: ADMIN
+    enabled: true
+  list:
+    requiredRank: ADMIN
+    enabled: true
+achievements:
+  requiredRank: PLAYER
+  enabled: true
+profile:
+  requiredRank: PLAYER
+  enabled: true
+rules:
+  requiredRank: PLAYER
+  enabled: true
+cutscene:
+  requiredRank: ADMIN
+  enabled: true
+quest:
+  requiredRank: ADMIN
+  enabled: true
+heatmap:
+  requiredRank: ADMIN
+  enabled: true
+  top:
+    requiredRank: ADMIN
+    enabled: true
+  here:
+    requiredRank: ADMIN
+    enabled: true
+attune:
+  requiredRank: ADMIN
+  enabled: true
+worldlogger:
+  requiredRank: MODERATOR
+  enabled: true
+  inspect:
+    requiredRank: MODERATOR
+    enabled: true
+  page:
+    requiredRank: MODERATOR
+    enabled: true
+  rollback:
+    requiredRank: ADMIN
+    enabled: true
+  restore:
+    requiredRank: ADMIN
+    enabled: true
+  restorechunk:
+    requiredRank: ADMIN
+    enabled: true
+protection:
+  requiredRank: PLAYER
+  enabled: true
+setprotection:
+  requiredRank: MODERATOR
+  enabled: true
+offlinemessages:
+  requiredRank: PLAYER
+  enabled: true
+adminofflinemessages:
+  requiredRank: ADMIN
+  enabled: true
+rewards:
+  requiredRank: PLAYER
+  enabled: true
+rewardstest:
+  requiredRank: ADMIN
+  enabled: true
+statsmenu:
+  requiredRank: ADMIN
+  enabled: true
+balance:
+  requiredRank: PLAYER
+  enabled: true
+  give:
+    requiredRank: ADMIN
+    enabled: true
+  set:
+    requiredRank: ADMIN
+    enabled: true
+  get:
+    requiredRank: ADMIN
+    enabled: true
+client:
+  requiredRank: ADMIN
+  enabled: true
+  admin:
+    requiredRank: ADMIN
+    enabled: true
+  search:
+    requiredRank: ADMIN
+    enabled: true
+  promote:
+    requiredRank: ADMIN
+    enabled: true
+  demote:
+    requiredRank: ADMIN
+    enabled: true
+  count:
+    requiredRank: ADMIN
+    enabled: true
+  setmediachannel:
+    requiredRank: ADMIN
+    enabled: true
+punish:
+  requiredRank: TRIAL_MOD
+  enabled: true
+legacypunish:
+  requiredRank: ADMIN
+  enabled: true
+  add:
+    requiredRank: ADMIN
+    enabled: true
+  custom:
+    requiredRank: ADMIN
+    enabled: true
+  history:
+    requiredRank: ADMIN
+    enabled: true
+  remove:
+    requiredRank: ADMIN
+    enabled: true
+punishmenthistory:
+  requiredRank: PLAYER
+  enabled: true
+profilestats:
+  requiredRank: DEVELOPER
+  enabled: true

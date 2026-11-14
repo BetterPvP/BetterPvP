@@ -2,28 +2,35 @@ package me.mykindos.betterpvp.hub.commands.queue;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.orchestration.api.OrchestrationGateway;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.entity.Player;
+import org.bukkit.command.CommandSender;
 
+/**
+ * {@code /queue admit <player>} lets a queued player in next.
+ */
 @Singleton
-@SubCommand(QueueCommand.class)
-public class QueueAdmitCommand extends Command {
+@BrigadierSubCommand(QueueCommand.class)
+public class QueueAdmitCommand extends BrigadierCommand {
 
     private final OrchestrationGateway orchestrationGateway;
-    private final ClientManager clientManager;
 
     @Inject
-    public QueueAdmitCommand(OrchestrationGateway orchestrationGateway, ClientManager clientManager) {
+    public QueueAdmitCommand(ClientManager clientManager, OrchestrationGateway orchestrationGateway) {
+        super(clientManager);
         this.orchestrationGateway = orchestrationGateway;
-        this.clientManager = clientManager;
     }
 
     @Override
@@ -33,45 +40,40 @@ public class QueueAdmitCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "hub.command.queue-admit.description";
+        return "Force the next admission for a queued player";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 1) {
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.admit.usage");
-            return;
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("hub.command.queue-admit.description");
+    }
 
-        final Client target = clientManager.search().offline(args[0]).join().orElse(null);
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName())
+                        .executes(context -> {
+                            admit(context.getSource().getSender(), context.getArgument("player", String.class));
+                            return Command.SINGLE_SUCCESS;
+                        }));
+    }
+
+    private void admit(CommandSender sender, String targetName) {
+        final Client target = clientManager.search().offline(targetName).join().orElse(null);
         if (target == null) {
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.player-not-found");
+            UtilMessage.message(sender, "core.prefix.queue", "hub.queue.player-not-found");
             return;
         }
-
         try {
-            final boolean admitted = orchestrationGateway.admitQueuedPlayer(target.getUniqueId()).join();
-            if (!admitted) {
-                UtilMessage.message(player, "core.prefix.queue", "hub.queue.not-queued",
+            if (!orchestrationGateway.admitQueuedPlayer(target.getUniqueId()).join()) {
+                UtilMessage.message(sender, "core.prefix.queue", "hub.queue.not-queued",
                         Component.text(target.getName(), NamedTextColor.YELLOW));
                 return;
             }
-
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.admit.success",
-                    Component.text(target.getName(), NamedTextColor.YELLOW));
+            UtilMessage.message(sender, "core.prefix.queue", "hub.queue.admit.success", Component.text(target.getName(), NamedTextColor.YELLOW));
         } catch (Exception ex) {
             QueueCommandSupport.logCommandFailure("admit queued player " + target.getName(), ex);
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.admit.failed");
+            UtilMessage.message(sender, "core.prefix.queue", "hub.queue.admit.failed");
         }
-    }
-
-    @Override
-    public Rank getRequiredRank() {
-        return Rank.ADMIN;
-    }
-
-    @Override
-    public String getArgumentType(int argCount) {
-        return argCount == 2 ? ArgumentType.PLAYER.name() : ArgumentType.NONE.name();
     }
 }

@@ -2,26 +2,32 @@ package me.mykindos.betterpvp.core.resourcepack.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
 import me.mykindos.betterpvp.core.locale.Translations;
-import me.mykindos.betterpvp.core.resourcepack.ResourcePack;
 import me.mykindos.betterpvp.core.resourcepack.ResourcePackHandler;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * {@code /unloadpack <player> <pack>} takes a resource pack back off a player.
+ */
 @Singleton
-public class UnloadPackCommand extends Command {
+public class UnloadPackCommand extends BrigadierCommand {
 
     private final ResourcePackHandler resourcePackHandler;
 
     @Inject
-    public UnloadPackCommand(ResourcePackHandler resourcePackHandler) {
+    public UnloadPackCommand(ClientManager clientManager, ResourcePackHandler resourcePackHandler) {
+        super(clientManager);
         this.resourcePackHandler = resourcePackHandler;
     }
 
@@ -32,52 +38,33 @@ public class UnloadPackCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.unload-pack.description";
+        return "Unload a resource pack by name";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 2) {
-            UtilMessage.message(player, Translations.component("core.command.unloadpack.usage"));
-            return;
-        }
-
-        Player target = Bukkit.getPlayer(args[0]);
-        if (target == null) return;
-
-        ResourcePack pack = resourcePackHandler.getResourcePack(args[1]).join();
-        if (pack == null) {
-            UtilMessage.message(player, Translations.component("core.command.resourcepack.not_found"));
-            return;
-        }
-
-        target.removeResourcePack(pack.getUuid());
-
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.unload-pack.description");
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        List<String> tabCompletions = new ArrayList<>();
-
-        if (args.length == 0) return super.processTabComplete(sender, args);
-
-
-        String lowercaseArg = args[args.length - 1].toLowerCase();
-        if (getArgumentType(args.length).equals("RESOURCE_PACK")) {
-            tabCompletions.addAll(resourcePackHandler.getResourcePacks().keySet().stream().filter(s -> s.toLowerCase().startsWith(lowercaseArg)).toList());
-        }
-
-        tabCompletions.addAll(super.processTabComplete(sender, args));
-        return tabCompletions;
-    }
-
-    @Override
-    public String getArgumentType(int arg) {
-        if (arg == 1) {
-            return ArgumentType.PLAYER.name();
-        } else if (arg == 2) {
-            return "RESOURCE_PACK";
-        }
-        return ArgumentType.NONE.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName())
+                        .then(LoadPackCommand.packArgument(resourcePackHandler)
+                                .executes(context -> {
+                                    final CommandSender sender = context.getSource().getSender();
+                                    final Player target = Bukkit.getPlayer(context.getArgument("player", String.class));
+                                    if (target == null) {
+                                        return Command.SINGLE_SUCCESS;
+                                    }
+                                    resourcePackHandler.getResourcePack(context.getArgument("pack", String.class)).thenAccept(pack -> {
+                                        if (pack == null) {
+                                            UtilMessage.message(sender, Translations.component("core.command.resourcepack.not_found"));
+                                            return;
+                                        }
+                                        target.removeResourcePack(pack.getUuid());
+                                    });
+                                    return Command.SINGLE_SUCCESS;
+                                })));
     }
 }

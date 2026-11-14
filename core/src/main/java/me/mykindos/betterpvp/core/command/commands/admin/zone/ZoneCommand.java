@@ -1,17 +1,27 @@
 package me.mykindos.betterpvp.core.command.commands.admin.zone;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
-import org.bukkit.entity.Player;
+import net.kyori.adventure.text.Component;
 
 /**
- * Root {@code /zone} command for zone tooling. Holds the {@code list} subcommand and the {@code discovery} group; left
- * open for future zone subcommands. Defaults to the ADMIN rank via the command loader config.
+ * Root {@code /zone} command for zone tooling. Holds the {@code list} subcommand and the {@code discovery} group.
  */
 @Singleton
-public class ZoneCommand extends Command {
+public class ZoneCommand extends BrigadierCommand {
+
+    @Inject
+    public ZoneCommand(ClientManager clientManager) {
+        super(clientManager);
+    }
 
     @Override
     public String getName() {
@@ -24,12 +34,16 @@ public class ZoneCommand extends Command {
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        UtilMessage.message(player, "Zones", "<yellow>Usage:</yellow> /zone <list|discovery>");
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.zone.description");
     }
 
     @Override
-    public String getArgumentType(int argCount) {
-        return argCount == 1 ? ArgumentType.SUBCOMMAND.name() : ArgumentType.NONE.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    UtilMessage.message(context.getSource().getSender(), "core.prefix.zones", "core.command.zone.usage");
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 }

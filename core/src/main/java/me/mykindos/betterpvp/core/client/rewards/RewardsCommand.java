@@ -2,23 +2,29 @@ package me.mykindos.betterpvp.core.client.rewards;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.concurrent.CompletableFuture;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.client.Client;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.client.repository.ClientSQLLayer;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
 import me.mykindos.betterpvp.core.cooldowns.CooldownManager;
 import me.mykindos.betterpvp.core.item.ItemFactory;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
-import java.util.concurrent.CompletableFuture;
-
 @Singleton
 @CustomLog
-public class RewardsCommand extends Command {
+public class RewardsCommand extends BrigadierCommand {
 
     private final Core core;
     private final ClientSQLLayer clientSQLLayer;
@@ -26,12 +32,13 @@ public class RewardsCommand extends Command {
     private final CooldownManager cooldownManager;
 
     @Inject
-    public RewardsCommand(Core core, ClientSQLLayer clientSQLLayer, ItemFactory itemFactory, CooldownManager cooldownManager) {
+    public RewardsCommand(ClientManager clientManager, Core core, ClientSQLLayer clientSQLLayer, ItemFactory itemFactory, CooldownManager cooldownManager) {
+        super(clientManager);
         this.core = core;
         this.clientSQLLayer = clientSQLLayer;
         this.itemFactory = itemFactory;
         this.cooldownManager = cooldownManager;
-        this.aliases.add("inventory");
+        getAliases().add("inventory");
     }
 
     @Override
@@ -41,11 +48,24 @@ public class RewardsCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.rewards.description";
+        return "Open the rewards menu";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.rewards.description");
+    }
+
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    execute(getPlayerFromExecutor(context), getClientFromExecutor(context));
+                    return Command.SINGLE_SUCCESS;
+                });
+    }
+
+    private void execute(Player player, Client client, String... args) {
         if (cooldownManager.use(player, "Inventory", 1, false, false)) {
             CompletableFuture.runAsync(() -> {
                 RewardBox rewardBox = clientSQLLayer.getRewardBox(client);

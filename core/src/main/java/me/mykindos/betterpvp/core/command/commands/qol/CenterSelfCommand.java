@@ -1,21 +1,29 @@
 package me.mykindos.betterpvp.core.command.commands.qol;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.framework.annotations.WithReflection;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.List;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Location;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-
+/**
+ * Moves the executor to the centre of their block, looking down, or level toward a compass direction.
+ */
 @Singleton
-public class CenterSelfCommand extends Command {
+public class CenterSelfCommand extends BrigadierCommand {
 
-    @WithReflection
-    public CenterSelfCommand() {
+    @Inject
+    public CenterSelfCommand(ClientManager clientManager) {
+        super(clientManager);
     }
 
     @Override
@@ -25,64 +33,44 @@ public class CenterSelfCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.center-self.description";
+        return "Center yourself on the specified block";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        Location location = player.getLocation().clone().toCenterLocation();
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.center-self.description");
+    }
+
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    center(getPlayerFromExecutor(context), "");
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.argument("direction", StringArgumentType.word())
+                        .suggests((context, builder) -> {
+                            List.of("NORTH", "SOUTH", "EAST", "WEST").stream()
+                                    .filter(direction -> direction.toLowerCase().startsWith(builder.getRemainingLowerCase()))
+                                    .forEach(builder::suggest);
+                            return builder.buildFuture();
+                        })
+                        .executes(context -> {
+                            center(getPlayerFromExecutor(context), context.getArgument("direction", String.class));
+                            return Command.SINGLE_SUCCESS;
+                        }));
+    }
+
+    private static void center(Player player, String direction) {
+        final Location location = player.getLocation().clone().toCenterLocation();
         location.setY(location.getBlockY());
-        if (args.length > 0) {
-            String direction = args[0].toUpperCase();
-            switch (direction) {
-                case "NORTH" -> {
-                    location.setRotation(-180, 0);
-                    break;
-                }
-                case "SOUTH" -> {
-                    location.setRotation(0, 0);
-                    break;
-                }
-                case "EAST" -> {
-                    location.setRotation(-90, 0);
-                    break;
-                }
-                case "WEST" -> {
-                    location.setRotation(90, 0);
-                    break;
-                }
-                default -> {
-                    location.setRotation(0, 90);
-                }
-            }
-        } else {
-            location.setRotation(0, 90);
+        switch (direction.toUpperCase()) {
+            case "NORTH" -> location.setRotation(-180, 0);
+            case "SOUTH" -> location.setRotation(0, 0);
+            case "EAST" -> location.setRotation(-90, 0);
+            case "WEST" -> location.setRotation(90, 0);
+            default -> location.setRotation(0, 90);
         }
-
         player.teleport(location);
-    }
-
-    @Override
-    public String getArgumentType(int arg) {
-        return arg == 1 ? "DIRECTION" : ArgumentType.NONE.name();
-    }
-
-
-    @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        List<String> tabCompletions = new ArrayList<>();
-
-        if (args.length == 0) return super.processTabComplete(sender, args);
-
-        List<String> directions = List.of("NORTH", "SOUTH", "EAST", "WEST");
-
-        String lowercaseArg = args[args.length - 1].toLowerCase();
-        if (getArgumentType(args.length).equals("DIRECTION")) {
-            tabCompletions.addAll(directions.stream()
-                    .filter(name -> name.toLowerCase().startsWith(lowercaseArg)).toList());
-        }
-
-        tabCompletions.addAll(super.processTabComplete(sender, args));
-        return tabCompletions;
     }
 }

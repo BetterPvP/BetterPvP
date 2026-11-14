@@ -1,18 +1,27 @@
 package me.mykindos.betterpvp.core.world.site.command;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.entity.Player;
 
 /**
- * Admin tooling for sites and their live instances. Defaults to the ADMIN rank via the command loader config.
+ * Admin tooling for sites and their live instances: {@code list}, {@code create}, {@code tp} and {@code delete}.
  */
 @Singleton
-public class SiteCommand extends Command {
+public class SiteCommand extends BrigadierCommand {
+
+    @Inject
+    public SiteCommand(ClientManager clientManager) {
+        super(clientManager);
+    }
 
     @Override
     public String getName() {
@@ -25,13 +34,16 @@ public class SiteCommand extends Command {
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        UtilMessage.simpleMessage(player, "Sites", Component.text("Usage: ", NamedTextColor.YELLOW)
-                .append(Component.text("/site <list|create|tp|delete>")));
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.site.description");
     }
 
     @Override
-    public String getArgumentType(int argCount) {
-        return argCount == 1 ? ArgumentType.SUBCOMMAND.name() : ArgumentType.NONE.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    UtilMessage.message(context.getSource().getSender(), "core.prefix.sites", "core.command.site.usage");
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 }

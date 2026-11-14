@@ -2,13 +2,19 @@ package me.mykindos.betterpvp.progression.profession.woodcutting.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.List;
+import java.util.Objects;
 import lombok.CustomLog;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
 import me.mykindos.betterpvp.core.cooldowns.CooldownManager;
 import me.mykindos.betterpvp.core.item.BaseItem;
 import me.mykindos.betterpvp.core.item.ItemFactory;
-import me.mykindos.betterpvp.core.item.ItemInstance;
 import me.mykindos.betterpvp.core.item.ItemRegistry;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilInventory;
@@ -20,19 +26,24 @@ import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
+/**
+ * Turns each stack of 64 logs of one type, or of every type, into a compacted log, once the executor has the Tree
+ * Compactor skill. In creative it hands out a stack of compacted logs instead.
+ */
 @CustomLog
 @Singleton
-public class TreeCompactorCommand extends Command {
+public class TreeCompactorCommand extends BrigadierCommand {
+
+    private static final String TREE_COMPACTOR = "Tree Compactor";
+    private static final List<String> LOG_TYPES = List.of(
+            "Oak", "Birch", "Dark_Oak", "Jungle", "Mangrove",
+            "Acacia", "Spruce", "Cherry", "Pale_Oak", "All"
+    );
 
     private final ProfessionProfileManager professionProfileManager;
     private final TreeCompactor treeCompactor;
@@ -40,15 +51,10 @@ public class TreeCompactorCommand extends Command {
     private final ItemFactory itemFactory;
     private final CooldownManager cooldownManager;
 
-    public static String TREE_COMPACTOR = "Tree Compactor";
-
-    public final static List<String> LOG_TYPES = List.of(
-            "Oak", "Birch", "Dark_Oak", "Jungle", "Mangrove",
-            "Acacia", "Spruce", "Cherry", "Pale_Oak", "All"
-    );
-
     @Inject
-    public TreeCompactorCommand(ProfessionProfileManager professionProfileManager, TreeCompactor treeCompactor, ItemRegistry itemRegistry, ItemFactory itemFactory, CooldownManager cooldownManager) {
+    public TreeCompactorCommand(ClientManager clientManager, ProfessionProfileManager professionProfileManager, TreeCompactor treeCompactor,
+                                ItemRegistry itemRegistry, ItemFactory itemFactory, CooldownManager cooldownManager) {
+        super(clientManager);
         this.professionProfileManager = professionProfileManager;
         this.treeCompactor = treeCompactor;
         this.itemRegistry = itemRegistry;
@@ -63,54 +69,40 @@ public class TreeCompactorCommand extends Command {
 
     @Override
     public @NotNull String getDescription() {
-        return "Compactor your logs!!!";
+        return "Compact your logs";
     }
 
     @Override
-    public String getArgumentType(int arg) {
-        return (arg == 1) ? "LOG_TYPES" : ArgumentType.NONE.name();
+    public Component getDescriptionComponent() {
+        return Translations.component("progression.command.tree-compactor.description");
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        List<String> tabCompletions = new ArrayList<>();
-
-        if (args.length == 0) return super.processTabComplete(sender, args);
-
-        if (getArgumentType(args.length).equals("LOG_TYPES")) {
-            tabCompletions.addAll(LOG_TYPES);
-        }
-
-        tabCompletions.addAll(super.processTabComplete(sender, args));
-        return tabCompletions;
-    }
-
-    public Component getUsage() {
-        return Translations.component("progression.command.treecompactor.usage",
-                Component.text("Usage", NamedTextColor.YELLOW),
-                Component.text("treecompactor <logType>", NamedTextColor.GREEN));
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    compact(getPlayerFromExecutor(context), null);
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.argument("logType", StringArgumentType.word())
+                        .suggests((context, builder) -> {
+                            LOG_TYPES.stream()
+                                    .filter(type -> type.toLowerCase().startsWith(builder.getRemainingLowerCase()))
+                                    .forEach(builder::suggest);
+                            return builder.buildFuture();
+                        })
+                        .executes(context -> {
+                            compact(getPlayerFromExecutor(context), context.getArgument("logType", String.class));
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 
     /**
-     * Turns a <code>logType</code> (in the form of a String) into its corresponding {@link Material}.
-     *
-     * @param logType       the log type to convert to a {@link Material}
-     * @param ignoreAllType If this is false, then the 'All' logType will return the AIR Material, else it will be ignored
-     * @return the corresponding {@link Material} converted from the logType
+     * @param logType the log type to compact, or {@code null} when none was given
      */
-    private @Nullable Material logTypeToMaterial(@NotNull String logType, boolean ignoreAllType) {
-        boolean isThisLogTypeTheAllType = logType.equalsIgnoreCase("All");
-        if (ignoreAllType && isThisLogTypeTheAllType) return null;
-
-        String logStringMaterial = logType.toUpperCase() + "_LOG";
-        return (isThisLogTypeTheAllType) ? Material.AIR : Material.getMaterial(logStringMaterial);
-    }
-
-    @Override
-    public void execute(Player player, Client client, String... args) {
+    private void compact(Player player, @Nullable String logType) {
         if (player.getGameMode() == GameMode.CREATIVE) {
-            final BaseItem compactedLog = getCompactedLog();
-            final @NotNull ItemStack result = itemFactory.create(compactedLog).createItemStack();
+            final ItemStack result = itemFactory.create(getCompactedLog()).createItemStack();
             result.setAmount(64);
             player.getInventory().addItem(result);
             UtilMessage.message(player, "core.prefix.treecompactor", "progression.command.treecompactor.creative-logs");
@@ -118,70 +110,69 @@ public class TreeCompactorCommand extends Command {
         }
 
         professionProfileManager.getObject(player.getUniqueId().toString()).ifPresent(profile -> {
-
-            int skillLevel = treeCompactor.getSkillLevel(profile);
-            if (skillLevel <= 0) {
+            if (treeCompactor.getSkillLevel(profile) <= 0) {
                 UtilMessage.message(player, "core.prefix.treecompactor", "progression.command.treecompactor.not-unlocked",
                         Component.text("/woodcutting", NamedTextColor.GREEN));
                 return;
             }
-
-            // Only 1 argument is acceptable
-            if (args.length != 1) {
-                UtilMessage.message(player, "core.prefix.command", getUsage());
+            if (logType == null) {
+                UtilMessage.message(player, "core.prefix.command", Translations.component("progression.command.treecompactor.usage",
+                        Component.text("treecompactor <logType>", NamedTextColor.GREEN)).color(NamedTextColor.YELLOW));
                 return;
             }
 
-            String inputtedLogType = args[0];
-            @Nullable Material inputtedLogTypeAsMaterial = logTypeToMaterial(inputtedLogType, false);
-
-
-            if (inputtedLogTypeAsMaterial == null) {
+            final @Nullable Material logMaterial = logTypeToMaterial(logType, false);
+            if (logMaterial == null) {
                 UtilMessage.message(player, "core.prefix.treecompactor", "progression.command.treecompactor.unknown-log-type",
-                        Component.text(inputtedLogType, NamedTextColor.WHITE));
+                        Component.text(logType, NamedTextColor.WHITE));
                 return;
             }
 
+            // The cooldown manager tells the player when they are still on cooldown
             if (!cooldownManager.use(player, TREE_COMPACTOR, treeCompactor.getCooldown(), true, false)) {
-                // Cooldown manager will already send a msg
                 return;
             }
 
-            List<Material> logTypesToCompact;
-            if (inputtedLogTypeAsMaterial.equals(Material.AIR)) {
-                logTypesToCompact = LOG_TYPES.stream()
-                        .map(logType -> logTypeToMaterial(logType, true))
-                        .filter(Objects::nonNull)
-                        .toList();
-            } else {
-                logTypesToCompact = List.of(inputtedLogTypeAsMaterial);
-            }
+            final List<Material> logTypesToCompact = logMaterial == Material.AIR
+                    ? LOG_TYPES.stream().map(type -> logTypeToMaterial(type, true)).filter(Objects::nonNull).toList()
+                    : List.of(logMaterial);
 
-            int logsAfterCompaction = 0;
-
-            for (Material logMaterial : logTypesToCompact) {
-                while (UtilInventory.contains(player, logMaterial, 64)) {
-                    if (UtilInventory.remove(player, logMaterial, 64)) {
-                        final BaseItem compactedLog = getCompactedLog();
-                        final ItemInstance itemInstance = itemFactory.create(compactedLog);
-                        player.getInventory().addItem(itemInstance.createItemStack());
-                        logsAfterCompaction++;
+            int compacted = 0;
+            for (Material material : logTypesToCompact) {
+                while (UtilInventory.contains(player, material, 64)) {
+                    if (UtilInventory.remove(player, material, 64)) {
+                        player.getInventory().addItem(itemFactory.create(getCompactedLog()).createItemStack());
+                        compacted++;
                     }
                 }
             }
 
             UtilMessage.message(player, "core.prefix.treecompactor", "progression.command.treecompactor.compacted",
-                    Component.text(logsAfterCompaction + "x", NamedTextColor.GREEN));
-
-            if (logsAfterCompaction == 0) cooldownManager.removeCooldown(player, TREE_COMPACTOR, true);
-
-            log.info("{} compacted {}x logs.", player.getName(), logsAfterCompaction)
+                    Component.text(compacted + "x", NamedTextColor.GREEN));
+            if (compacted == 0) {
+                cooldownManager.removeCooldown(player, TREE_COMPACTOR, true);
+            }
+            log.info("{} compacted {}x logs.", player.getName(), compacted)
                     .addClientContext(player).addLocationContext(player.getLocation()).submit();
         });
     }
 
+    /**
+     * Turns a log type into its {@link Material}.
+     *
+     * @param logType       the log type to convert
+     * @param ignoreAllType when false, the {@code All} log type maps to {@link Material#AIR}, and when true to null
+     * @return the log's material, or null for an unknown type
+     */
+    private static @Nullable Material logTypeToMaterial(@NotNull String logType, boolean ignoreAllType) {
+        final boolean isAll = logType.equalsIgnoreCase("All");
+        if (ignoreAllType && isAll) {
+            return null;
+        }
+        return isAll ? Material.AIR : Material.getMaterial(logType.toUpperCase() + "_LOG");
+    }
+
     private @NotNull BaseItem getCompactedLog() {
-        final NamespacedKey key = new NamespacedKey("progression", "compacted_log");
-        return Objects.requireNonNull(itemRegistry.getItem(key));
+        return Objects.requireNonNull(itemRegistry.getItem(new NamespacedKey("progression", "compacted_log")));
     }
 }

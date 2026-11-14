@@ -2,28 +2,34 @@ package me.mykindos.betterpvp.core.chat.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.mykindos.betterpvp.core.chat.events.ChatSentEvent;
-import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
-import org.bukkit.entity.Player;
+import net.kyori.adventure.text.Component;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 
+/**
+ * Toggles a server-wide chat silence. While it is on, only trial moderators and above can talk.
+ */
 @Singleton
 @BPvPListener
-public class SilenceChatCommand extends Command implements Listener  {
+public class SilenceChatCommand extends BrigadierCommand implements Listener {
 
-    private final ClientManager clientManager;
     private boolean isChatSilenced = false;
 
     @Inject
-    public SilenceChatCommand(ClientManager clientManager){
-        this.clientManager = clientManager;
+    public SilenceChatCommand(ClientManager clientManager) {
+        super(clientManager);
     }
 
     @Override
@@ -33,18 +39,22 @@ public class SilenceChatCommand extends Command implements Listener  {
 
     @Override
     public String getDescription() {
-        return "core.command.silence-chat.description";
+        return "Prevent non-ranked players from sending messages";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (isChatSilenced) {
-            UtilMessage.broadcast("core.prefix.chat", "core.command.silencechat.off");
-            isChatSilenced = false;
-            return;
-        }
-        UtilMessage.broadcast("core.prefix.chat", "core.command.silencechat.on");
-        isChatSilenced = true;
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.silence-chat.description");
+    }
+
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    isChatSilenced = !isChatSilenced;
+                    UtilMessage.broadcast("core.prefix.chat", isChatSilenced ? "core.command.silencechat.on" : "core.command.silencechat.off");
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
@@ -54,11 +64,4 @@ public class SilenceChatCommand extends Command implements Listener  {
             event.cancel("Chat is silenced");
         }
     }
-
-    @Override
-    public String getArgumentType(int argCount) {
-        return ArgumentType.NONE.name();
-    }
-
-
 }

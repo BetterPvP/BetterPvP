@@ -2,11 +2,17 @@ package me.mykindos.betterpvp.game.command;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.mykindos.betterpvp.core.chat.channels.ChatChannel;
 import me.mykindos.betterpvp.core.chat.events.ChatSentEvent;
-import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
@@ -17,15 +23,22 @@ import me.mykindos.betterpvp.game.framework.model.team.Team;
 import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.jetbrains.annotations.Nullable;
 
+/**
+ * Sends one message to the executor's team chat, or toggles their chat channel between team and server. Only works
+ * in a team game, for a player on a team.
+ */
 @Singleton
-public class TeamChatCommand extends Command {
+public class TeamChatCommand extends BrigadierCommand {
+
     private final ServerController serverController;
 
     @Inject
-    public TeamChatCommand(ServerController serverController) {
+    public TeamChatCommand(ClientManager clientManager, ServerController serverController) {
+        super(clientManager);
         this.serverController = serverController;
-        aliases.add("tc");
+        getAliases().add("tc");
     }
 
     @Override
@@ -35,31 +48,51 @@ public class TeamChatCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "game.command.team-chat.description";
+        return "Toggle team only chat";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("game.command.team-chat.description");
+    }
+
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    final Team team = team(player);
+                    if (team != null) {
+                        final Gamer gamer = getClientFromExecutor(context).getGamer();
+                        gamer.setChatChannel(gamer.getChatChannel().equals(team.getTeamChatChannel()) ? ChatChannel.SERVER : ChatChannel.TEAM);
+                    }
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.argument("message", StringArgumentType.greedyString())
+                        .executes(context -> {
+                            final Player player = getPlayerFromExecutor(context);
+                            final Team team = team(player);
+                            if (team != null) {
+                                UtilServer.callEventAsync(JavaPlugin.getPlugin(GamePlugin.class), new ChatSentEvent(player, team.getTeamChatChannel(),
+                                        Component.text(UtilFormat.spoofNameForLunar(player.getName()) + ": "),
+                                        Component.text(context.getArgument("message", String.class))));
+                            }
+                            return Command.SINGLE_SUCCESS;
+                        }));
+    }
+
+    /**
+     * @return the executor's team, or null after telling them why they have none
+     */
+    private @Nullable Team team(Player player) {
         if (!(serverController.getCurrentGame() instanceof TeamGame<?> teamGame)) {
             UtilMessage.message(player, "core.prefix.game", "game.command.teamchat.not-team-game");
-            return;
+            return null;
         }
-        final Gamer gamer = client.getGamer();
-        final Team playerTeam = teamGame.getPlayerTeam(player);
-        if (playerTeam == null) {
+        final Team team = teamGame.getPlayerTeam(player);
+        if (team == null) {
             UtilMessage.message(player, "core.prefix.clans", "game.command.teamchat.not-on-team");
-            return;
         }
-        if (args.length > 0) {
-            UtilServer.callEventAsync(JavaPlugin.getPlugin(GamePlugin.class), new ChatSentEvent(player, playerTeam.getTeamChatChannel(), Component.text(UtilFormat.spoofNameForLunar(player.getName()) + ": "),
-                    Component.text(String.join(" ", args))));
-            return;
-        }
-
-        if (gamer.getChatChannel().equals(playerTeam.getTeamChatChannel())) {
-            gamer.setChatChannel(ChatChannel.SERVER);
-        } else {
-            gamer.setChatChannel(ChatChannel.TEAM);
-        }
+        return team;
     }
 }

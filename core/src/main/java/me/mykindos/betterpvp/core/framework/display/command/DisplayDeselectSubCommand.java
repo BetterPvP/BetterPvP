@@ -2,19 +2,33 @@ package me.mykindos.betterpvp.core.framework.display.command;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
 import me.mykindos.betterpvp.core.framework.display.DisplayEditorManager;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
+/**
+ * {@code /display deselect} drops the display the executor is editing.
+ */
 @Singleton
-@SubCommand(DisplayCommand.class)
-public class DisplayDeselectSubCommand extends Command {
+@BrigadierSubCommand(DisplayCommand.class)
+public class DisplayDeselectSubCommand extends BrigadierCommand {
+
+    private final DisplayEditorManager displayEditorManager;
 
     @Inject
-    private DisplayEditorManager displayEditorManager;
+    public DisplayDeselectSubCommand(ClientManager clientManager, DisplayEditorManager displayEditorManager) {
+        super(clientManager);
+        this.displayEditorManager = displayEditorManager;
+    }
 
     @Override
     public String getName() {
@@ -23,17 +37,25 @@ public class DisplayDeselectSubCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.display-deselect.description";
+        return "Deselect a display entity";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        final boolean deselected = displayEditorManager.selectDisplay(player, null);
-        if (!deselected) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.not_selecting");
-            return;
-        }
-        UtilMessage.message(player, "core.prefix.display", "core.display.deselected");
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.display-deselect.description");
     }
 
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    if (!displayEditorManager.selectDisplay(player, null)) {
+                        UtilMessage.message(player, "core.prefix.display", "core.display.not_selecting");
+                        return Command.SINGLE_SUCCESS;
+                    }
+                    UtilMessage.message(player, "core.prefix.display", "core.display.deselected");
+                    return Command.SINGLE_SUCCESS;
+                });
+    }
 }

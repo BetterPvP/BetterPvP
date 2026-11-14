@@ -2,9 +2,16 @@ package me.mykindos.betterpvp.core.client.stats.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.client.stats.StatConcurrentHashMap;
 import me.mykindos.betterpvp.core.client.stats.StatFilterType;
@@ -17,20 +24,18 @@ import me.mykindos.betterpvp.core.client.stats.impl.dungeons.DungeonNativeStat;
 import me.mykindos.betterpvp.core.client.stats.impl.dungeons.DungeonWrapperStat;
 import me.mykindos.betterpvp.core.client.stats.impl.game.GameTeamMapNativeStat;
 import me.mykindos.betterpvp.core.client.stats.impl.game.GameTeamMapWrapperStat;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.IConsoleCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.server.Realm;
 import me.mykindos.betterpvp.core.server.Season;
 import me.mykindos.betterpvp.core.server.Server;
 import me.mykindos.betterpvp.core.utilities.UtilMath;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
 
 /**
  * Dev profiling command that seeds a player's in-memory stat map with a large, realistic dataset.
@@ -49,7 +54,7 @@ import java.util.List;
  * for spark profiling without spending the profiling budget on achievement / stat update events during seeding.
  */
 @Singleton
-public class ProfileStatsCommand extends Command implements IConsoleCommand {
+public class ProfileStatsCommand extends BrigadierCommand {
 
     private static final int SEASON_COUNT = 5;
     private static final int REALMS_PER_SEASON = 3;
@@ -73,13 +78,11 @@ public class ProfileStatsCommand extends Command implements IConsoleCommand {
             GameTeamMapNativeStat.Action.WIN
     };
 
-    private final ClientManager clientManager;
-
     @Inject
     public ProfileStatsCommand(ClientManager clientManager) {
-        this.clientManager = clientManager;
-        aliases.add("seedprofilestats");
-        aliases.add("profilestatsload");
+        super(clientManager);
+        getAliases().add("seedprofilestats");
+        getAliases().add("profilestatsload");
     }
 
     @Override
@@ -89,27 +92,41 @@ public class ProfileStatsCommand extends Command implements IConsoleCommand {
 
     @Override
     public String getDescription() {
-        return "core.command.profile-stats.description";
+        return "Seed realistic filtered-stat-heavy profiling data into one or more online players";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        executeInternal(player, args);
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.profile-stats.description");
     }
 
     @Override
-    public void execute(CommandSender sender, String[] args) {
-        executeInternal(sender, args);
-    }
-
-    @Override
-    public Rank getRequiredRank() {
-        return Rank.DEVELOPER;
-    }
-
-    @Override
-    public String getArgumentType(int argCount) {
-        return argCount == 1 ? ArgumentType.PLAYER.name() : ArgumentType.NONE.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        // The target is a player name, "all", or a multiplier for the executor alone
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    executeInternal(context.getSource().getSender(), new String[0]);
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.argument("target", StringArgumentType.word())
+                        .suggests((context, builder) -> {
+                            builder.suggest("all");
+                            Bukkit.getOnlinePlayers().stream()
+                                    .map(Player::getName)
+                                    .filter(name -> name.toLowerCase().startsWith(builder.getRemainingLowerCase()))
+                                    .forEach(builder::suggest);
+                            return builder.buildFuture();
+                        })
+                        .executes(context -> {
+                            executeInternal(context.getSource().getSender(), new String[]{context.getArgument("target", String.class)});
+                            return Command.SINGLE_SUCCESS;
+                        })
+                        .then(BrigadierNodes.argument("multiplier", IntegerArgumentType.integer(1, 50))
+                                .executes(context -> {
+                                    executeInternal(context.getSource().getSender(), new String[]{context.getArgument("target", String.class),
+                                            String.valueOf(context.getArgument("multiplier", Integer.class))});
+                                    return Command.SINGLE_SUCCESS;
+                                })));
     }
 
     private void executeInternal(CommandSender sender, String[] args) {
@@ -415,7 +432,4 @@ public class ProfileStatsCommand extends Command implements IConsoleCommand {
     private record ParsedArgs(List<Player> targets, int multiplier) {
     }
 }
-
-
-
 

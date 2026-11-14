@@ -14,6 +14,7 @@ import me.mykindos.betterpvp.core.framework.adapter.PluginAdapter;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapters;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEventExecutor;
 import me.mykindos.betterpvp.core.locale.TranslationService;
+import me.mykindos.betterpvp.hub.commands.BrigadierHubCommandLoader;
 import me.mykindos.betterpvp.hub.commands.HubCommandLoader;
 import me.mykindos.betterpvp.hub.injector.HubInjectorModule;
 import me.mykindos.betterpvp.hub.listener.HubListenerLoader;
@@ -57,6 +58,9 @@ public class Hub extends BPvPPlugin {
 
             var listenerLoader = injector.getInstance(HubListenerLoader.class);
             listenerLoader.registerListeners(PACKAGE);
+
+            var brigadierCommandLoader = injector.getInstance(BrigadierHubCommandLoader.class);
+            brigadierCommandLoader.loadCommands(PACKAGE);
 
             var commandLoader = injector.getInstance(HubCommandLoader.class);
             commandLoader.loadCommands(PACKAGE);

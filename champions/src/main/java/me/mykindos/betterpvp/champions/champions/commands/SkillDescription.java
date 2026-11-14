@@ -1,30 +1,36 @@
 package me.mykindos.betterpvp.champions.champions.commands;
 
-
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Optional;
 import me.mykindos.betterpvp.champions.champions.skills.ChampionsSkillManager;
 import me.mykindos.betterpvp.champions.champions.skills.Skill;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import net.kyori.adventure.text.format.TextDecoration;
 import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
-
+/**
+ * Prints a skill's description at a level, level 1 by default. Skill names use {@code _} for spaces.
+ */
 @Singleton
-public class SkillDescription extends Command {
+public class SkillDescription extends BrigadierCommand {
+
     private final ChampionsSkillManager skillManager;
 
     @Inject
-    public SkillDescription(ChampionsSkillManager skillManager) {
+    public SkillDescription(ClientManager clientManager, ChampionsSkillManager skillManager) {
+        super(clientManager);
         this.skillManager = skillManager;
     }
 
@@ -35,71 +41,59 @@ public class SkillDescription extends Command {
 
     @Override
     public String getDescription() {
-        return "champions.command.skill-description.description";
+        return "Prints the description of the skill to your chat";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 1) {
-            UtilMessage.message(player, "core.prefix.skills", Translations.component("champions.command.skilldescription.usage").color(NamedTextColor.GREEN));
-            return;
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("champions.command.skill-description.description");
+    }
 
-        Optional<Skill> skillOptional = skillManager.getObject(args[0].replace("_", " "));
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("skill", StringArgumentType.word())
+                        .suggests((context, builder) -> {
+                            skillManager.getObjects().keySet().stream()
+                                    .map(name -> name.replace(" ", "_"))
+                                    .filter(name -> name.toLowerCase().contains(builder.getRemainingLowerCase()))
+                                    .forEach(builder::suggest);
+                            return builder.buildFuture();
+                        })
+                        .executes(context -> {
+                            describe(context.getSource().getSender(), context.getArgument("skill", String.class), 1);
+                            return Command.SINGLE_SUCCESS;
+                        })
+                        .then(BrigadierNodes.argument("level", IntegerArgumentType.integer(0))
+                                .executes(context -> {
+                                    describe(context.getSource().getSender(), context.getArgument("skill", String.class),
+                                            context.getArgument("level", Integer.class));
+                                    return Command.SINGLE_SUCCESS;
+                                })));
+    }
+
+    private void describe(CommandSender sender, String skillName, int level) {
+        final Optional<Skill> skillOptional = skillManager.getObject(skillName.replace("_", " "));
         if (skillOptional.isEmpty()) {
-            UtilMessage.message(player, "core.prefix.skills", "champions.command.skilldescription.invalid-skill", Component.text(args[0], NamedTextColor.YELLOW));
+            UtilMessage.message(sender, "core.prefix.skills", "champions.command.skilldescription.invalid-skill",
+                    Component.text(skillName, NamedTextColor.YELLOW));
             return;
         }
-
-        Skill skill = skillOptional.get();
-
-        int level = 1;
-        if (args.length > 1) {
-            try {
-                level = Integer.parseInt(args[1]);
-                if (level > skill.getMaxLevel() + 1 || level < 0) {
-                    throw new NumberFormatException("level too high");
-                }
-            } catch (NumberFormatException ex) {
-                UtilMessage.message(player, "core.prefix.skill", "champions.command.skilldescription.invalid-number", Component.text(args[0], NamedTextColor.GREEN), Component.text("1", NamedTextColor.GREEN), Component.text(String.valueOf(skill.getMaxLevel() + 1), NamedTextColor.GREEN));
-                return;
-            }
+        final Skill skill = skillOptional.get();
+        if (level > skill.getMaxLevel() + 1) {
+            UtilMessage.message(sender, "core.prefix.skill", "champions.command.skilldescription.invalid-number",
+                    Component.text(skillName, NamedTextColor.GREEN), Component.text("1", NamedTextColor.GREEN),
+                    Component.text(String.valueOf(skill.getMaxLevel() + 1), NamedTextColor.GREEN));
+            return;
         }
-
         Component component = Component.empty()
                 .append(skill.getDisplayName().color(NamedTextColor.YELLOW))
                 .append(Component.text(" ("))
                 .append(Component.text(level, NamedTextColor.GREEN))
                 .append(Component.text(")"));
         for (Component line : skill.getDescription(level)) {
-            Component styled = line.colorIfAbsent(NamedTextColor.GRAY)
-                    .decoration(TextDecoration.ITALIC, false);
-            component = component.appendNewline().append(styled);
+            component = component.appendNewline().append(line.colorIfAbsent(NamedTextColor.GRAY).decoration(TextDecoration.ITALIC, false));
         }
-
-        UtilMessage.message(player, "core.prefix.skill", component);
-
-    }
-
-    @Override
-    public String getArgumentType(int argCount) {
-        return (argCount == 1 ? "SKILLS" : ArgumentType.NONE.name());
-    }
-
-    @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        //explicitly add null if it is a player
-        List<String> tabCompletions = new ArrayList<>();
-
-        if (args.length == 0) return super.processTabComplete(sender, args);
-
-        String lowercaseArg = args[args.length - 1].toLowerCase();
-        if (getArgumentType(args.length).equals("SKILLS")) {
-            tabCompletions.addAll(skillManager.getObjects().keySet().stream()
-                    .map(string -> string.replace(" ", "_"))
-                    .filter(skill -> skill.toLowerCase().contains(lowercaseArg)).toList());
-        }
-        tabCompletions.addAll(super.processTabComplete(sender, args));
-        return tabCompletions;
+        UtilMessage.message(sender, "core.prefix.skill", component);
     }
 }

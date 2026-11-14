@@ -2,21 +2,30 @@ package me.mykindos.betterpvp.hub.commands.queue;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
-import me.mykindos.betterpvp.core.command.Command;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.hub.feature.queue.HubQueueStatusRegistry;
 import me.mykindos.betterpvp.orchestration.model.QueueStatusUpdate;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
 
+/**
+ * Shows the executor's place in the queue they are in. Its subcommands leave the queue and manage server queues.
+ */
 @Singleton
-public class QueueCommand extends Command {
+public class QueueCommand extends BrigadierCommand {
 
     private final HubQueueStatusRegistry queueStatusRegistry;
 
     @Inject
-    public QueueCommand(HubQueueStatusRegistry queueStatusRegistry) {
+    public QueueCommand(ClientManager clientManager, HubQueueStatusRegistry queueStatusRegistry) {
+        super(clientManager);
         this.queueStatusRegistry = queueStatusRegistry;
     }
 
@@ -27,34 +36,27 @@ public class QueueCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "hub.command.queue.description";
+        return "View or manage queue state";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length > 0) {
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.usage-header");
-            UtilMessage.message(player, QueueCommandSupport.buildUsageMessage(client));
-            return;
-        }
-
-        final QueueStatusUpdate status = queueStatusRegistry.getStatus(player.getUniqueId()).orElse(null);
-        if (status == null) {
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.not-queued-any");
-            return;
-        }
-
-        UtilMessage.message(player, "core.prefix.queue", "hub.queue.status-header");
-        UtilMessage.message(player, QueueCommandSupport.buildQueueMessage(status));
+    public Component getDescriptionComponent() {
+        return Translations.component("hub.command.queue.description");
     }
 
     @Override
-    public Rank getRequiredRank() {
-        return Rank.PLAYER;
-    }
-
-    @Override
-    public String getArgumentType(int argCount) {
-        return argCount == 1 ? ArgumentType.SUBCOMMAND.name() : ArgumentType.NONE.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    final QueueStatusUpdate status = queueStatusRegistry.getStatus(player.getUniqueId()).orElse(null);
+                    if (status == null) {
+                        UtilMessage.message(player, "core.prefix.queue", "hub.queue.not-queued-any");
+                        return Command.SINGLE_SUCCESS;
+                    }
+                    UtilMessage.message(player, "core.prefix.queue", "hub.queue.status-header");
+                    UtilMessage.message(player, QueueCommandSupport.buildQueueMessage(status));
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 }

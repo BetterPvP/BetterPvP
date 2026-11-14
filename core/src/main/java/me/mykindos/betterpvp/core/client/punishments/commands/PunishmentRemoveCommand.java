@@ -2,6 +2,10 @@ package me.mykindos.betterpvp.core.client.punishments.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.UUID;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.Rank;
@@ -11,9 +15,7 @@ import me.mykindos.betterpvp.core.client.punishments.PunishmentTypes;
 import me.mykindos.betterpvp.core.client.punishments.types.IPunishmentType;
 import me.mykindos.betterpvp.core.client.punishments.types.RevokeType;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.IConsoleCommand;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
@@ -21,25 +23,18 @@ import org.bukkit.Bukkit;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.UUID;
-
 @Singleton
 @CustomLog
-@SubCommand(LegacyPunishmentCommand.class)
-public class PunishmentRemoveCommand extends Command implements IConsoleCommand {
-
-    private final ClientManager clientManager;
+@BrigadierSubCommand(LegacyPunishmentCommand.class)
+public class PunishmentRemoveCommand extends PunishmentSubCommand {
     private final PunishmentRepository punishmentRepository;
 
     @Inject
     public PunishmentRemoveCommand(ClientManager clientManager, PunishmentRepository punishmentRepository) {
-        this.clientManager = clientManager;
+        super(clientManager);
         this.punishmentRepository = punishmentRepository;
 
-        aliases.add("r");
+        getAliases().add("r");
     }
 
     @Override
@@ -49,16 +44,21 @@ public class PunishmentRemoveCommand extends Command implements IConsoleCommand 
 
     @Override
     public String getDescription() {
-        return "core.command.punishment-remove.description";
+        return "Base command for removing a punishment from a client";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.punishment-remove.description");
+    }
+
+    @Override
+    protected void execute(Player player, Client client, String... args) {
         execute(player, args);
     }
 
     @Override
-    public void execute(CommandSender sender, String[] args) {
+    protected void execute(CommandSender sender, String[] args) {
         if (args.length < 4) {
             UtilMessage.message(sender, "core.prefix.command", "core.command.punishment.remove.usage");
             return;
@@ -123,7 +123,7 @@ public class PunishmentRemoveCommand extends Command implements IConsoleCommand 
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
+    protected List<String> suggestions(CommandSender sender, String[] args) {
         List<String> tabCompletions = new ArrayList<>();
         if (args.length == 0) return tabCompletions;
 
@@ -144,18 +144,17 @@ public class PunishmentRemoveCommand extends Command implements IConsoleCommand 
         return tabCompletions;
     }
 
-    @Override
-    public String getArgumentType(int i) {
+    private String getArgumentType(int i) {
 
         if (i == 1) {
             return "TYPE";
         } else if (i == 2) {
-            return ArgumentType.PLAYER.name();
+            return "PLAYER";
         } else if (i ==3) {
             return "REVOKE";
         }
 
-        return ArgumentType.NONE.name();
+        return "NONE";
     }
 
 }

@@ -2,28 +2,35 @@ package me.mykindos.betterpvp.hub.commands.queue;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.orchestration.api.OrchestrationGateway;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.entity.Player;
+import org.bukkit.command.CommandSender;
 
+/**
+ * {@code /queue remove <player>} takes a player out of the queue they are in.
+ */
 @Singleton
-@SubCommand(QueueCommand.class)
-public class QueueRemoveCommand extends Command {
+@BrigadierSubCommand(QueueCommand.class)
+public class QueueRemoveCommand extends BrigadierCommand {
 
     private final OrchestrationGateway orchestrationGateway;
-    private final ClientManager clientManager;
 
     @Inject
-    public QueueRemoveCommand(OrchestrationGateway orchestrationGateway, ClientManager clientManager) {
+    public QueueRemoveCommand(ClientManager clientManager, OrchestrationGateway orchestrationGateway) {
+        super(clientManager);
         this.orchestrationGateway = orchestrationGateway;
-        this.clientManager = clientManager;
     }
 
     @Override
@@ -33,45 +40,40 @@ public class QueueRemoveCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "hub.command.queue-remove.description";
+        return "Remove a player from the queue";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length < 1) {
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.remove.usage");
-            return;
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("hub.command.queue-remove.description");
+    }
 
-        final Client target = clientManager.search().offline(args[0]).join().orElse(null);
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName())
+                        .executes(context -> {
+                            remove(context.getSource().getSender(), context.getArgument("player", String.class));
+                            return Command.SINGLE_SUCCESS;
+                        }));
+    }
+
+    private void remove(CommandSender sender, String targetName) {
+        final Client target = clientManager.search().offline(targetName).join().orElse(null);
         if (target == null) {
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.player-not-found");
+            UtilMessage.message(sender, "core.prefix.queue", "hub.queue.player-not-found");
             return;
         }
-
         try {
-            final boolean removed = orchestrationGateway.removeQueuedPlayer(target.getUniqueId()).join();
-            if (!removed) {
-                UtilMessage.message(player, "core.prefix.queue", "hub.queue.not-queued",
+            if (!orchestrationGateway.removeQueuedPlayer(target.getUniqueId()).join()) {
+                UtilMessage.message(sender, "core.prefix.queue", "hub.queue.not-queued",
                         Component.text(target.getName(), NamedTextColor.YELLOW));
                 return;
             }
-
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.remove.success",
-                    Component.text(target.getName(), NamedTextColor.YELLOW));
+            UtilMessage.message(sender, "core.prefix.queue", "hub.queue.remove.success", Component.text(target.getName(), NamedTextColor.YELLOW));
         } catch (Exception ex) {
             QueueCommandSupport.logCommandFailure("remove queued player " + target.getName(), ex);
-            UtilMessage.message(player, "core.prefix.queue", "hub.queue.remove.failed");
+            UtilMessage.message(sender, "core.prefix.queue", "hub.queue.remove.failed");
         }
-    }
-
-    @Override
-    public Rank getRequiredRank() {
-        return Rank.ADMIN;
-    }
-
-    @Override
-    public String getArgumentType(int argCount) {
-        return argCount == 2 ? ArgumentType.PLAYER.name() : ArgumentType.NONE.name();
     }
 }

@@ -1,26 +1,29 @@
 package me.mykindos.betterpvp.core.command.commands.admin.zone;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.ICommand;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
-import org.bukkit.command.CommandSender;
-import org.bukkit.entity.Player;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import net.kyori.adventure.text.Component;
 
 /**
- * {@code /zone discovery <list|add|remove|reset> ...} — groups the zone-discovery management subcommands under
- * {@code /zone}. Bare invocation prints usage; tab-completion descends into the matching leaf (the command framework
- * only auto-descends one level, so this group descends to its own children explicitly).
+ * {@code /zone discovery <list|add|remove|reset> ...} groups the zone-discovery management subcommands.
  */
 @Singleton
-@SubCommand(ZoneCommand.class)
-public class ZoneDiscoverySubCommand extends Command {
+@BrigadierSubCommand(ZoneCommand.class)
+public class ZoneDiscoverySubCommand extends BrigadierCommand {
+
+    @Inject
+    public ZoneDiscoverySubCommand(ClientManager clientManager) {
+        super(clientManager);
+    }
 
     @Override
     public String getName() {
@@ -33,30 +36,16 @@ public class ZoneDiscoverySubCommand extends Command {
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        UtilMessage.message(player, "Zones", "<yellow>Usage:</yellow> /zone discovery <list|add|remove|reset> <player>");
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.zone.discovery.description");
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        if (args.length <= 1) {
-            final String arg = args.length == 1 ? args[0].toLowerCase() : "";
-            final List<String> completions = new ArrayList<>();
-            for (ICommand sub : getSubCommands()) {
-                if (sub.showTabCompletion(sender) && sub.getName().toLowerCase().startsWith(arg)) {
-                    completions.add(sub.getName());
-                }
-            }
-            return completions;
-        }
-        return getSubCommand(args[0])
-                .filter(sub -> sub.showTabCompletion(sender))
-                .map(sub -> sub.processTabComplete(sender, Arrays.copyOfRange(args, 1, args.length)))
-                .orElseGet(ArrayList::new);
-    }
-
-    @Override
-    public String getArgumentType(int argCount) {
-        return ArgumentType.SUBCOMMAND.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    UtilMessage.message(context.getSource().getSender(), "core.prefix.zones", "core.command.zone.discovery.usage");
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 }

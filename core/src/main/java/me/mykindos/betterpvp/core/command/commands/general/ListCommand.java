@@ -2,9 +2,16 @@ package me.mykindos.betterpvp.core.command.commands.general;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.ArrayList;
+import java.util.List;
 import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.world.site.Presence;
 import me.mykindos.betterpvp.core.world.site.Site;
@@ -12,10 +19,8 @@ import me.mykindos.betterpvp.core.world.site.SiteRegistry;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.JoinConfiguration;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Lists everybody online, grouped by the site they are in.
@@ -24,15 +29,14 @@ import java.util.List;
  * but knowing how busy the server is has never been something to hide.
  */
 @Singleton
-public class ListCommand extends Command {
+public class ListCommand extends BrigadierCommand {
 
-    private final ClientManager clientManager;
     private final SiteRegistry registry;
     private final Presence presence;
 
     @Inject
     public ListCommand(ClientManager clientManager, SiteRegistry registry, Presence presence) {
-        this.clientManager = clientManager;
+        super(clientManager);
         this.registry = registry;
         this.presence = presence;
     }
@@ -44,27 +48,35 @@ public class ListCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.list.description";
+        return "get a list of all players online";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        UtilMessage.message(player, "core.prefix.list", "core.command.list.online_count",
-                Component.text(clientManager.getOnline().size()));
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.list.description");
+    }
 
-        for (Site site : registry.all()) {
-            final List<Player> present = presence.onSite(site);
-            if (!present.isEmpty()) {
-                UtilMessage.message(player, "core.prefix.list", "core.command.list.group",
-                        site.getDisplayName(), names(present));
-            }
-        }
-
-        final List<Player> elsewhere = presence.offSite();
-        if (!elsewhere.isEmpty()) {
-            UtilMessage.message(player, "core.prefix.list", "core.command.list.group",
-                    Component.translatable("core.command.list.elsewhere"), names(elsewhere));
-        }
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final CommandSender sender = context.getSource().getSender();
+                    UtilMessage.message(sender, "core.prefix.list", "core.command.list.online_count",
+                            Component.text(clientManager.getOnline().size()));
+                    for (Site site : registry.all()) {
+                        final List<Player> present = presence.onSite(site);
+                        if (!present.isEmpty()) {
+                            UtilMessage.message(sender, "core.prefix.list", "core.command.list.group",
+                                    site.getDisplayName(), names(present));
+                        }
+                    }
+                    final List<Player> elsewhere = presence.offSite();
+                    if (!elsewhere.isEmpty()) {
+                        UtilMessage.message(sender, "core.prefix.list", "core.command.list.group",
+                                Component.translatable("core.command.list.elsewhere"), names(elsewhere));
+                    }
+                    return Command.SINGLE_SUCCESS;
+                });
     }
 
     private Component names(List<Player> players) {

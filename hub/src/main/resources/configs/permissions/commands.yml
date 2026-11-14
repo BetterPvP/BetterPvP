@@ -1,0 +1,24 @@
+hub:
+  requiredRank: ADMIN
+  enabled: true
+queue:
+  requiredRank: PLAYER
+  enabled: true
+  leave:
+    requiredRank: PLAYER
+    enabled: true
+  admit:
+    requiredRank: ADMIN
+    enabled: true
+  view:
+    requiredRank: ADMIN
+    enabled: true
+  pause:
+    requiredRank: ADMIN
+    enabled: true
+  remove:
+    requiredRank: ADMIN
+    enabled: true
+  resume:
+    requiredRank: ADMIN
+    enabled: true

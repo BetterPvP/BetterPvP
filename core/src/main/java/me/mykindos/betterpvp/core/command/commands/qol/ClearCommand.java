@@ -2,41 +2,45 @@ package me.mykindos.betterpvp.core.command.commands.qol;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 import lombok.CustomLog;
-import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
 import me.mykindos.betterpvp.core.item.ItemFactory;
 import me.mykindos.betterpvp.core.item.ItemInstance;
 import me.mykindos.betterpvp.core.item.ItemRegistry;
 import me.mykindos.betterpvp.core.item.component.impl.uuid.UUIDProperty;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.menu.impl.ConfirmationMenu;
-import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
-
+/**
+ * Clears the executor's inventory, or a named player's. Clearing tracked items asks for confirmation and logs each
+ * one.
+ */
 @Singleton
 @CustomLog
-public class ClearCommand extends Command {
+public class ClearCommand extends BrigadierCommand {
 
     private final ItemFactory itemFactory;
     private final ItemRegistry registry;
-    private final ClientManager clientManager;
 
     @Inject
-    public ClearCommand(ItemFactory itemFactory, ItemRegistry registry, ClientManager clientManager) {
+    public ClearCommand(ClientManager clientManager, ItemFactory itemFactory, ItemRegistry registry) {
+        super(clientManager);
         this.itemFactory = itemFactory;
         this.registry = registry;
-        this.clientManager = clientManager;
     }
 
     @Override
@@ -46,70 +50,68 @@ public class ClearCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.clear.description";
+        return "Clear your inventory";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.clear.description");
+    }
 
-        if (args.length == 0) {
-            doClear(player, player);
-        } else if (args.length == 1) {
-            Player target = Bukkit.getPlayer(args[0]);
-            if (target != null) {
-                doClear(player, target);
-            }
-        } else {
-            UtilMessage.message(player, "core.prefix.clear", "core.command.clear.usage");
-        }
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    doClear(player, player);
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName())
+                        .executes(context -> {
+                            final Player runner = getPlayerFromExecutor(context);
+                            final Player target = Bukkit.getPlayer(context.getArgument("player", String.class));
+                            if (target != null) {
+                                doClear(runner, target);
+                            }
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 
     private Map<ItemInstance, UUID> getUUIDItems(Player target) {
-        final List<ItemInstance> items = itemFactory.fromArray(target.getInventory().getContents());
         final Map<ItemInstance, UUID> map = new HashMap<>();
-        for (ItemInstance item : items) {
-            if (item == null) continue;
-            final Optional<UUIDProperty> uuidCompt = item.getComponent(UUIDProperty.class);
-            uuidCompt.ifPresent(uuidProperty -> map.put(item, uuidProperty.getUniqueId()));
+        for (ItemInstance item : itemFactory.fromArray(target.getInventory().getContents())) {
+            if (item != null) {
+                item.getComponent(UUIDProperty.class).ifPresent(uuidProperty -> map.put(item, uuidProperty.getUniqueId()));
+            }
         }
         return map;
     }
 
     private void doClear(Player runner, Player target) {
-        Map<ItemInstance, UUID> uuidItems = getUUIDItems(target);
-        Component successFeedback = Translations.component("core.command.clear.success",
+        final Component successFeedback = Translations.component("core.command.clear.success",
                 Component.text(runner.getName()),
                 Component.text(target.getName()));
-        if (uuidItems.isEmpty()) {
+        if (getUUIDItems(target).isEmpty()) {
             target.getInventory().clear();
             clientManager.sendMessageToRank("core.prefix.clear", successFeedback, Rank.TRIAL_MOD);
             return;
         }
 
-        // NOTE: ConfirmationMenu currently requires a String, so we cannot pass a translatable Component here.
-        // Key present in bundles: core.command.clear.confirmation_title (intentional skip for now)
-        new ConfirmationMenu("Inventory has UUIDItems, confirm clear", (success) -> {
+        // The menu takes its title as plain text, so it is rendered in the runner's language here
+        final String title = PlainTextComponentSerializer.plainText().serialize(Translations.render(
+                Translations.component("core.command.clear.confirmation_title"), runner.locale()));
+        new ConfirmationMenu(title, success -> {
             if (Boolean.TRUE.equals(success)) {
-                getUUIDItems(target).forEach((item, uuid) -> {
-                    log.info("{} cleared ({}) from {}'s inventory",
-                            runner.getName(), uuid, target.getName())
-                            .setAction("ITEM_CLEAR")
-                            .addClientContext(runner)
-                            .addItemContext(registry, item)
-                            .addClientContext(target, true)
-                            .submit();
-                });
+                getUUIDItems(target).forEach((item, uuid) -> log.info("{} cleared ({}) from {}'s inventory",
+                                runner.getName(), uuid, target.getName())
+                        .setAction("ITEM_CLEAR")
+                        .addClientContext(runner)
+                        .addItemContext(registry, item)
+                        .addClientContext(target, true)
+                        .submit());
                 target.getInventory().clear();
                 clientManager.sendMessageToRank("core.prefix.clear", successFeedback, Rank.TRIAL_MOD);
             }
         }).show(runner);
-    }
-
-    @Override
-    public String getArgumentType(int args) {
-        if (args == 1) {
-            return ArgumentType.PLAYER.name();
-        }
-        return ArgumentType.NONE.name();
     }
 }

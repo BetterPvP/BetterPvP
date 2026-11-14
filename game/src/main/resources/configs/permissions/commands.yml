@@ -1,0 +1,12 @@
+game:
+  requiredRank: MODERATOR
+  enabled: true
+spectate:
+  requiredRank: PLAYER
+  enabled: true
+spectatorchat:
+  requiredRank: PLAYER
+  enabled: true
+teamchat:
+  requiredRank: PLAYER
+  enabled: true

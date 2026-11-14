@@ -2,20 +2,37 @@ package me.mykindos.betterpvp.hub.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.Rank;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.IConsoleCommand;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.model.Reloadable;
 import me.mykindos.betterpvp.hub.Hub;
-import me.mykindos.betterpvp.hub.listener.HubListenerLoader;
-import org.bukkit.command.CommandSender;
+import net.kyori.adventure.text.Component;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
+/**
+ * {@code /hub reload} reloads the Hub's config, reloadables and commands.
+ */
 @Singleton
-public class HubCommand extends Command implements IConsoleCommand {
+public class HubCommand extends BrigadierCommand {
+
+    private final Hub hub;
+    private final HubCommandLoader commandLoader;
+    private final BrigadierHubCommandLoader brigadierCommandLoader;
+
+    @Inject
+    public HubCommand(ClientManager clientManager, Hub hub, HubCommandLoader commandLoader, BrigadierHubCommandLoader brigadierCommandLoader) {
+        super(clientManager);
+        this.hub = hub;
+        this.commandLoader = commandLoader;
+        this.brigadierCommandLoader = brigadierCommandLoader;
+    }
 
     @Override
     public String getName() {
@@ -24,62 +41,28 @@ public class HubCommand extends Command implements IConsoleCommand {
 
     @Override
     public String getDescription() {
-        return "hub.command.hub.description";
+        return "Hub base command";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("hub.command.hub.description");
     }
 
     @Override
-    public void execute(CommandSender sender, String[] args) {
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.literal("reload")
+                        .executes(context -> {
+                            hub.reload();
+                            hub.getReloadables().forEach(Reloadable::reload);
+
+                            brigadierCommandLoader.reload();
+                            Bukkit.getOnlinePlayers().forEach(Player::updateCommands);
+                            commandLoader.reload(hub.getClass().getPackageName());
+
+                            UtilMessage.message(context.getSource().getSender(), "core.prefix.hub", "hub.command.reload.success");
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
-
-    @Override
-    public boolean informInsufficientRank() {
-        return true;
-    }
-
-    @Override
-    public Rank getRequiredRank() {
-        return Rank.ADMIN;
-    }
-
-    @Singleton
-    @SubCommand(HubCommand.class)
-    private static class ReloadCommand extends Command implements IConsoleCommand {
-
-        @Inject
-        private Hub hub;
-
-        @Inject
-        private HubCommandLoader commandLoader;
-
-        @Inject
-        private HubListenerLoader listenerLoader;
-
-        @Override
-        public String getName() {
-            return "reload";
-        }
-
-        @Override
-        public String getDescription() {
-        return "hub.command.reload.description";
-    }
-
-        @Override
-        public void execute(Player player, Client client, String... args) {
-            execute(player, args);
-        }
-
-        @Override
-        public void execute(CommandSender sender, String[] args) {
-            hub.reload();
-            hub.getReloadables().forEach(Reloadable::reload);
-            commandLoader.reload(hub.getClass().getPackageName());
-            UtilMessage.message(sender, "core.prefix.hub", "hub.command.reload.success");
-        }
-    }
-
 }

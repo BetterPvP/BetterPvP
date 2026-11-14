@@ -2,24 +2,29 @@ package me.mykindos.betterpvp.core.command.commands.general;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 
+/**
+ * Toggles whether the executor ignores private messages from a player.
+ */
 @Singleton
-public class IgnoreCommand extends Command {
-
-    private static final String IGNORE_PREFIX = "core.prefix.ignore";
-
-    private final ClientManager clientManager;
+public class IgnoreCommand extends BrigadierCommand {
 
     @Inject
     public IgnoreCommand(ClientManager clientManager) {
-        this.clientManager = clientManager;
+        super(clientManager);
     }
 
     @Override
@@ -29,39 +34,40 @@ public class IgnoreCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.ignore.description";
+        return "Ignore private messages from a player";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length >= 1) {
-
-            clientManager.search().offline(args[0]).thenAcceptAsync(targetOptional -> {
-                if (targetOptional.isEmpty()) {
-                    UtilMessage.message(player, IGNORE_PREFIX, "core.command.ignore.player_not_found",
-                            Component.text(args[0], NamedTextColor.YELLOW));
-                    return;
-                }
-                Client target = targetOptional.get();
-                if (client.getIgnores().contains(target.getUniqueId())) {
-                    //this player is already ignored, unignore them
-                    clientManager.removeIgnore(client, target);
-                    UtilMessage.message(player, IGNORE_PREFIX, "core.command.ignore.remove.success",
-                            Component.text(target.getName(), NamedTextColor.YELLOW));
-                    return;
-                }
-                clientManager.saveIgnore(client, target);
-                UtilMessage.message(player, IGNORE_PREFIX, "core.command.ignore.add.success",
-                        Component.text(target.getName(), NamedTextColor.YELLOW));
-            });
-
-        } else {
-            UtilMessage.message(player, COMMAND_PREFIX, "core.command.ignore.usage");
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.ignore.description");
     }
 
     @Override
-    public String getArgumentType(int index) {
-        return index == 1 ? ArgumentType.PLAYER.name() : ArgumentType.NONE.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName())
+                        .executes(context -> {
+                            final Player player = getPlayerFromExecutor(context);
+                            final Client client = getClientFromExecutor(context);
+                            final String targetName = context.getArgument("player", String.class);
+                            clientManager.search().offline(targetName).thenAcceptAsync(targetOptional -> {
+                                if (targetOptional.isEmpty()) {
+                                    UtilMessage.message(player, "core.prefix.ignore", "core.command.ignore.player_not_found",
+                                            Component.text(targetName, NamedTextColor.YELLOW));
+                                    return;
+                                }
+                                final Client target = targetOptional.get();
+                                if (client.getIgnores().contains(target.getUniqueId())) {
+                                    clientManager.removeIgnore(client, target);
+                                    UtilMessage.message(player, "core.prefix.ignore", "core.command.ignore.remove.success",
+                                            Component.text(target.getName(), NamedTextColor.YELLOW));
+                                    return;
+                                }
+                                clientManager.saveIgnore(client, target);
+                                UtilMessage.message(player, "core.prefix.ignore", "core.command.ignore.add.success",
+                                        Component.text(target.getName(), NamedTextColor.YELLOW));
+                            });
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 }

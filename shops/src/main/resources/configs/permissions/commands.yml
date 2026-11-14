@@ -1,0 +1,9 @@
+auctionhouse:
+  requiredRank: PLAYER
+  enabled: true
+cancelallauctions:
+  requiredRank: ADMIN
+  enabled: true
+shops:
+  requiredRank: ADMIN
+  enabled: true

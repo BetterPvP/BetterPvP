@@ -2,6 +2,11 @@ package me.mykindos.betterpvp.core.client.punishments.commands;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.Comparator;
+import java.util.List;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.client.Client;
@@ -9,29 +14,30 @@ import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.punishments.Punishment;
 import me.mykindos.betterpvp.core.client.punishments.PunishmentHandler;
 import me.mykindos.betterpvp.core.client.punishments.menu.PunishmentItem;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
 import me.mykindos.betterpvp.core.inventory.item.Item;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.menu.impl.ViewCollectionMenu;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
+import net.kyori.adventure.text.Component;
 import org.bukkit.entity.Player;
-
-import java.util.Comparator;
-import java.util.List;
 
 @Singleton
 @CustomLog
-public class PlayerPunishmentHistoryCommand extends Command {
+public class PlayerPunishmentHistoryCommand extends BrigadierCommand {
     private final Core core;
     private final PunishmentHandler punishmentHandler;
 
     @Inject
-    public PlayerPunishmentHistoryCommand(Core core, PunishmentHandler punishmentHandler) {
+    public PlayerPunishmentHistoryCommand(ClientManager clientManager, Core core, PunishmentHandler punishmentHandler) {
+        super(clientManager);
         this.core = core;
         this.punishmentHandler = punishmentHandler;
-        aliases.addAll(List.of(
-                "punishhistory",
-                "ph"
-        ));
+        getAliases().add("punishhistory");
+        getAliases().add("ph");
     }
 
     @Override
@@ -41,11 +47,32 @@ public class PlayerPunishmentHistoryCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.player-punishment-history.description";
+        return "Shows your own punishment history";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.player-punishment-history.description");
+    }
+
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    execute(getPlayerFromExecutor(context), getClientFromExecutor(context));
+                    return Command.SINGLE_SUCCESS;
+                })
+                // Only staff can look up someone else
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName())
+                        .requires(source -> senderHasRank(source, Rank.TRIAL_MOD))
+                        .executes(context -> {
+                            execute(getPlayerFromExecutor(context), getClientFromExecutor(context),
+                                    context.getArgument("player", String.class));
+                            return Command.SINGLE_SUCCESS;
+                        }));
+    }
+
+    private void execute(Player player, Client client, String... args) {
         try {
             if (args.length >= 1 && client.hasRank(Rank.TRIAL_MOD)) {
                 punishmentHandler.getClientManager().search().offline(args[0]).thenAcceptAsync(clientOptional -> {

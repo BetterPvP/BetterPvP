@@ -2,28 +2,36 @@ package me.mykindos.betterpvp.core.command.commands.general;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import lombok.RequiredArgsConstructor;
-import me.mykindos.betterpvp.core.client.Client;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
 import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.arguments.BPvPArgumentTypes;
 import me.mykindos.betterpvp.core.config.Config;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilPlayer;
 import net.kyori.adventure.text.Component;
-import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 
-@RequiredArgsConstructor(onConstructor = @__(@Inject))
+/**
+ * Shows the executor's ping, or another online player's when staff ask (or anyone, if config allows it).
+ */
 @Singleton
-public class PingCommand extends Command {
+public class PingCommand extends BrigadierCommand {
 
     @Inject
     @Config(path = "ping.onlyStaffCanSeeOthers", defaultValue = "true")
     private boolean onlyStaffCanSeeOthers;
 
-    private final ClientManager clientManager;
+    @Inject
+    public PingCommand(ClientManager clientManager) {
+        super(clientManager);
+    }
 
     @Override
     public String getName() {
@@ -32,62 +40,54 @@ public class PingCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.ping.description";
+        return "Show your ping";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        if (args.length == 0) {
-            UtilMessage.message(player, COMMAND_PREFIX, "core.command.ping.self", this.formatPing(UtilPlayer.getPing(player)));
-            return;
-        }
-
-        if (args.length == 1) {
-            if (this.onlyStaffCanSeeOthers && !client.hasRank(Rank.MODERATOR)) {
-                return;
-            }
-
-            this.clientManager.search(player).online(args[0]).ifPresent(targetClient -> {
-                Player targetPlayer = targetClient.getGamer().getPlayer();
-                if (targetPlayer == null) {
-                    return;
-                }
-
-                UtilMessage.message(player, COMMAND_PREFIX, "core.command.ping.other",
-                        Component.text(targetClient.getName(), NamedTextColor.YELLOW),
-                        this.formatPing(UtilPlayer.getPing(targetPlayer)));
-            });
-        }
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.ping.description");
     }
 
     @Override
-    public String getArgumentType(int argCount) {
-        if (argCount == 1) {
-            return ArgumentType.PLAYER.name();
-        }
-
-        return ArgumentType.NONE.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    final Player player = getPlayerFromExecutor(context);
+                    UtilMessage.message(player, "core.prefix.command", "core.command.ping.self", formatPing(UtilPlayer.getPing(player)));
+                    return Command.SINGLE_SUCCESS;
+                })
+                .then(BrigadierNodes.argument("player", BPvPArgumentTypes.playerName(),
+                                source -> !onlyStaffCanSeeOthers || senderHasRank(source, Rank.MODERATOR))
+                        .executes(context -> {
+                            final String targetName = context.getArgument("player", String.class);
+                            clientManager.search(context.getSource().getSender()).online(targetName).ifPresent(targetClient -> {
+                                final Player targetPlayer = targetClient.getGamer().getPlayer();
+                                if (targetPlayer == null) {
+                                    return;
+                                }
+                                UtilMessage.message(context.getSource().getSender(), "core.prefix.command", "core.command.ping.other",
+                                        Component.text(targetClient.getName(), NamedTextColor.YELLOW),
+                                        formatPing(UtilPlayer.getPing(targetPlayer)));
+                            });
+                            return Command.SINGLE_SUCCESS;
+                        }));
     }
 
     private Component formatPing(final int ping) {
-        NamedTextColor namedTextColor = NamedTextColor.DARK_RED;
-
+        NamedTextColor color = NamedTextColor.DARK_RED;
         if (ping <= 0) {
-            namedTextColor = NamedTextColor.WHITE;
+            color = NamedTextColor.WHITE;
         } else if (ping < 25) {
-            namedTextColor = NamedTextColor.DARK_GREEN;
+            color = NamedTextColor.DARK_GREEN;
         } else if (ping < 50) {
-            namedTextColor = NamedTextColor.GREEN;
+            color = NamedTextColor.GREEN;
         } else if (ping < 100) {
-            namedTextColor = NamedTextColor.GOLD;
+            color = NamedTextColor.GOLD;
         } else if (ping < 200) {
-            namedTextColor = NamedTextColor.YELLOW;
+            color = NamedTextColor.YELLOW;
         } else if (ping < 300) {
-            namedTextColor = NamedTextColor.RED;
+            color = NamedTextColor.RED;
         }
-
-        TextComponent textComponent = Component.text(ping).color(namedTextColor).append(Component.text("ms").color(NamedTextColor.GRAY));
-
-        return textComponent;
+        return Component.text(ping).color(color).append(Component.text("ms").color(NamedTextColor.GRAY));
     }
 }

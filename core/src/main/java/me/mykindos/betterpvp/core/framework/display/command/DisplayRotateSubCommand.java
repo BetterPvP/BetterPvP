@@ -1,29 +1,43 @@
 package me.mykindos.betterpvp.core.framework.display.command;
 
 import com.google.inject.Inject;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
+import com.google.inject.Singleton;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.builder.RequiredArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierSubCommand;
 import me.mykindos.betterpvp.core.framework.display.DisplayEditorManager;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMath;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
-import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Display;
 import org.bukkit.entity.Player;
 import org.bukkit.util.Transformation;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+/**
+ * {@code /display transform rotate <left|right> <set|add> <degrees> <x> <y> <z> [pivot]} turns the selected display about an axis, optionally around its centre.
+ */
+@Singleton
+@BrigadierSubCommand(DisplayTransformSubCommand.class)
+public class DisplayRotateSubCommand extends BrigadierCommand {
 
-@SubCommand(DisplayTransformSubCommand.class)
-public class DisplayRotateSubCommand extends Command {
+    private final DisplayEditorManager displayEditorManager;
 
     @Inject
-    private DisplayEditorManager displayEditorManager;
+    public DisplayRotateSubCommand(ClientManager clientManager, DisplayEditorManager displayEditorManager) {
+        super(clientManager);
+        this.displayEditorManager = displayEditorManager;
+    }
 
     @Override
     public String getName() {
@@ -32,90 +46,61 @@ public class DisplayRotateSubCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.display-rotate.description";
+        return "Rotate a display entity";
     }
 
     @Override
-    public List<String> processTabComplete(CommandSender sender, String[] args) {
-        if (args.length == 2) {
-            return List.of("left", "right");
-        } else if (args.length == 3) {
-            return List.of("set", "add");
-        } else if (args.length > 4 && args.length < 9) {
-            return List.of("0");
-        }
-        return Collections.emptyList();
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.display-rotate.description");
     }
 
     @Override
-    public String getArgumentType(int arg) {
-
-        return ArgumentType.NONE.name();
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        return BrigadierNodes.literal(getName())
+                .then(BrigadierNodes.literal("left")
+                        .then(BrigadierNodes.literal("set").then(angle(false, true)))
+                        .then(BrigadierNodes.literal("add").then(angle(false, false))))
+                .then(BrigadierNodes.literal("right")
+                        .then(BrigadierNodes.literal("set").then(angle(true, true)))
+                        .then(BrigadierNodes.literal("add").then(angle(true, false))));
     }
 
-    @Override
-    public void execute(Player player, Client client, String... args) {
-        args = Arrays.copyOfRange(args, 1, args.length);
-        if (args.length != 7 && args.length != 6) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.rotate.usage");
-            return;
-        }
+    private RequiredArgumentBuilder<CommandSourceStack, Float> angle(boolean right, boolean set) {
+        return BrigadierNodes.argument("degrees", FloatArgumentType.floatArg())
+                .then(BrigadierNodes.argument("x", FloatArgumentType.floatArg())
+                        .then(BrigadierNodes.argument("y", FloatArgumentType.floatArg())
+                                .then(BrigadierNodes.argument("z", FloatArgumentType.floatArg())
+                                        .executes(context -> rotate(context, right, set, false))
+                                        .then(BrigadierNodes.literal("pivot")
+                                                .executes(context -> rotate(context, right, set, true))))));
+    }
 
+    private int rotate(CommandContext<CommandSourceStack> context, boolean right, boolean set, boolean pivot) throws CommandSyntaxException {
+        final Player player = getPlayerFromExecutor(context);
         final Display selectedDisplay = displayEditorManager.getSelectedDisplay(player);
         if (selectedDisplay == null) {
             UtilMessage.message(player, "core.prefix.display", "core.display.not_selecting");
-            return;
+            return Command.SINGLE_SUCCESS;
         }
-
-        final String direction = args[0];
-        boolean right = direction.equalsIgnoreCase("right") || direction.equalsIgnoreCase("r");
-        if (!right && !direction.equalsIgnoreCase("left") && !direction.equalsIgnoreCase("l")) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.rotate.invalid_direction",
-                    Component.text(direction));
-            return;
+        final float degrees = context.getArgument("degrees", Float.class);
+        float x = context.getArgument("x", Float.class);
+        float y = context.getArgument("y", Float.class);
+        float z = context.getArgument("z", Float.class);
+        final Transformation transformation = selectedDisplay.getTransformation();
+        final Quaternionf rotation = right ? transformation.getRightRotation() : transformation.getLeftRotation();
+        if (pivot) {
+            x += transformation.getTranslation().x + transformation.getScale().x / 2;
+            y += transformation.getTranslation().y;
+            z += transformation.getTranslation().z + transformation.getScale().z / 2;
         }
-
-        final String type = args[1];
-        if (!type.equalsIgnoreCase("add") && !type.equalsIgnoreCase("set")) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.rotate.usage_type");
-            return;
-        }
-
-        float x;
-        float y;
-        float z;
-        float w;
-        try {
-            w = Float.parseFloat(args[2]);
-            x = Float.parseFloat(args[3]);
-            y = Float.parseFloat(args[4]);
-            z = Float.parseFloat(args[5]);
-        } catch (NumberFormatException e) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.rotate.invalid_values");
-            return;
-        }
-
-        final Transformation permutated = selectedDisplay.getTransformation();
-        final Quaternionf rotation = right ? permutated.getRightRotation() : permutated.getLeftRotation();
-        boolean pivot = args.length == 7 && args[6].equalsIgnoreCase("pivot");
-        if (args.length == 7 && !pivot) {
-            UtilMessage.message(player, "core.prefix.display", "core.display.rotate.invalid_argument",
-                    Component.text(args[7]));
-            return;
-        } else if (pivot) {
-            x += permutated.getTranslation().x + permutated.getScale().x / 2;
-            y += permutated.getTranslation().y;
-            z += permutated.getTranslation().z + permutated.getScale().z / 2;
-        }
-
-        if (type.equalsIgnoreCase("set")) {
-            rotation.setAngleAxis(Math.toRadians(w), x, y, z);
-            UtilMath.rotateAround(permutated, permutated.getLeftRotation(), permutated.getRightRotation(), new Vector3f(x, y, z));
+        if (set) {
+            rotation.setAngleAxis(Math.toRadians(degrees), x, y, z);
+            UtilMath.rotateAround(transformation, transformation.getLeftRotation(), transformation.getRightRotation(), new Vector3f(x, y, z));
         } else {
-            rotation.rotateAxis((float) Math.toRadians(w), x, y, z);
+            rotation.rotateAxis((float) Math.toRadians(degrees), x, y, z);
         }
-
-        selectedDisplay.setTransformation(permutated);
+        selectedDisplay.setTransformation(transformation);
         UtilMessage.message(player, "core.prefix.display", "core.display.rotate.success");
+        return Command.SINGLE_SUCCESS;
     }
 }

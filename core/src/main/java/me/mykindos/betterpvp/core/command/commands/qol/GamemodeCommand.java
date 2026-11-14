@@ -1,21 +1,30 @@
 package me.mykindos.betterpvp.core.command.commands.qol;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.command.Command;
-import me.mykindos.betterpvp.core.command.SubCommand;
-import me.mykindos.betterpvp.core.framework.annotations.WithReflection;
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import java.util.List;
+import java.util.Map;
+import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierCommand;
+import me.mykindos.betterpvp.core.command.brigadier.BrigadierNodes;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import net.kyori.adventure.text.Component;
 import org.bukkit.GameMode;
-import org.bukkit.entity.Player;
 
+/**
+ * Sets the executor's game mode by name, letter or number.
+ */
 @Singleton
-public class GamemodeCommand extends Command {
+public class GamemodeCommand extends BrigadierCommand {
 
-    @WithReflection
-    public GamemodeCommand() {
-        aliases.add("gm");
-
+    @Inject
+    public GamemodeCommand(ClientManager clientManager) {
+        super(clientManager);
+        getAliases().add("gm");
     }
 
     @Override
@@ -25,113 +34,31 @@ public class GamemodeCommand extends Command {
 
     @Override
     public String getDescription() {
-        return "core.command.gamemode.description";
+        return "Quickly change gamemode";
     }
 
     @Override
-    public void execute(Player player, Client client, String... args) {
-        UtilMessage.message(player, "core.prefix.command", "core.command.gamemode.invalid");
+    public Component getDescriptionComponent() {
+        return Translations.component("core.command.gamemode.description");
     }
 
-    @Singleton
-    @SubCommand(GamemodeCommand.class)
-    private static class SurvivalSubCommand extends Command {
-
-        public SurvivalSubCommand() {
-            aliases.add("s");
-            aliases.add("0");
-        }
-
-        @Override
-        public String getName() {
-            return "survival";
-        }
-
-        @Override
-        public String getDescription() {
-        return "core.command.survival.description";
+    @Override
+    public LiteralArgumentBuilder<CommandSourceStack> define() {
+        final LiteralArgumentBuilder<CommandSourceStack> root = BrigadierNodes.literal(getName())
+                .executes(context -> {
+                    UtilMessage.message(context.getSource().getSender(), "core.prefix.command", "core.command.gamemode.invalid");
+                    return Command.SINGLE_SUCCESS;
+                });
+        final Map<GameMode, List<String>> names = Map.of(
+                GameMode.SURVIVAL, List.of("survival", "s", "0"),
+                GameMode.CREATIVE, List.of("creative", "c", "1"),
+                GameMode.ADVENTURE, List.of("adventure", "a", "2"),
+                GameMode.SPECTATOR, List.of("spectator", "sp", "3"));
+        names.forEach((mode, literals) -> literals.forEach(literal -> root.then(BrigadierNodes.literal(literal)
+                .executes(context -> {
+                    getPlayerFromExecutor(context).setGameMode(mode);
+                    return Command.SINGLE_SUCCESS;
+                }))));
+        return root;
     }
-
-        @Override
-        public void execute(Player player, Client client, String[] args) {
-            player.setGameMode(GameMode.SURVIVAL);
-        }
-    }
-
-    @Singleton
-    @SubCommand(GamemodeCommand.class)
-    private static class CreativeSubCommand extends Command {
-
-        public CreativeSubCommand() {
-            aliases.add("c");
-            aliases.add("1");
-        }
-
-        @Override
-        public String getName() {
-            return "creative";
-        }
-
-        @Override
-        public String getDescription() {
-        return "core.command.creative.description";
-    }
-
-        @Override
-        public void execute(Player player, Client client, String[] args) {
-            player.setGameMode(GameMode.CREATIVE);
-        }
-    }
-
-    @Singleton
-    @SubCommand(GamemodeCommand.class)
-    private static class AdventureSubCommand extends Command {
-
-        public AdventureSubCommand() {
-            aliases.add("a");
-            aliases.add("2");
-        }
-
-        @Override
-        public String getName() {
-            return "adventure";
-        }
-
-        @Override
-        public String getDescription() {
-        return "core.command.adventure.description";
-    }
-
-        @Override
-        public void execute(Player player, Client client, String[] args) {
-            player.setGameMode(GameMode.ADVENTURE);
-        }
-    }
-
-    @Singleton
-    @SubCommand(GamemodeCommand.class)
-    private static class SpectatorSubCommand extends Command {
-
-        public SpectatorSubCommand() {
-            aliases.add("sp");
-            aliases.add("3");
-        }
-
-        @Override
-        public String getName() {
-            return "spectator";
-        }
-
-        @Override
-        public String getDescription() {
-        return "core.command.spectator.description";
-    }
-
-        @Override
-        public void execute(Player player, Client client, String[] args) {
-            player.setGameMode(GameMode.SPECTATOR);
-        }
-
-    }
-
 }

@@ -17,8 +17,25 @@ dependencies {
 
     annotationProcessor(libs.lombok)
     compileOnly(libs.lombok)
+
+    testImplementation(libs.bundles.test)
+    testImplementation(project(":core"))
+    testImplementation("org.mockito:mockito-core:5.23.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 paperweight {
     reobfArtifactConfiguration = io.papermc.paperweight.userdev.ReobfArtifactConfiguration.MOJANG_PRODUCTION
+}
+
+// jooqdynamic keeps org.jooq off this module's runtime classpath, which the test classpath inherits. Commands whose
+// services reference jOOQ types still need those classes to load, so jOOQ is appended to the test task directly.
+val jooqTestRuntime: Configuration = configurations.detachedConfiguration(
+    project.dependencies.create(
+        extensions.getByType<VersionCatalogsExtension>().named("libs")
+            .findLibrary("jooq").orElseThrow().get().toString()))
+
+tasks.test {
+    classpath += jooqTestRuntime
 }

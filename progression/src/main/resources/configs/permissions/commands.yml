@@ -1,0 +1,30 @@
+booster:
+  requiredRank: PLAYER
+  enabled: true
+fishing:
+  requiredRank: PLAYER
+  enabled: true
+mining:
+  requiredRank: PLAYER
+  enabled: true
+woodcutting:
+  requiredRank: PLAYER
+  enabled: true
+treecompactor:
+  requiredRank: PLAYER
+  enabled: true
+fishingexp:
+  requiredRank: ADMIN
+  enabled: true
+miningexp:
+  requiredRank: ADMIN
+  enabled: true
+woodcuttingexp:
+  requiredRank: ADMIN
+  enabled: true
+progression:
+  requiredRank: ADMIN
+  enabled: true
+  wipe:
+    requiredRank: ADMIN
+    enabled: true

@@ -55,7 +55,7 @@ dependencyResolutionManagement {
             version("junit", "5.13.0-M2")
             version("jooq", "3.19.3")
             version("postgres", "42.7.4")
-            version("velocity", "3.5.0-SNAPSHOT")
+            version("velocity", "4.3.1")
 
             // Library - PostgreSQL
             library("postgres", "org.postgresql", "postgresql").versionRef("postgres")

@@ -15,6 +15,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -46,12 +47,8 @@ class NetworkLayerTest {
         final Core core = mock(Core.class);
         when(core.getConfig()).thenReturn(yaml);
 
-        // Redis says it is not configured, which is the shape every unavailable implementation takes.
-        final RedisConnection redis = mock(RedisConnection.class);
-        when(redis.isUsable()).thenReturn(false);
-
         transports = new NetworkTransports();
-        layer = new NetworkLayer(core, transports, redis, new NatsConnection(core),
+        layer = new NetworkLayer(core, transports, new NatsConnection(core),
                 () -> mock(VelocityMessageBus.class),
                 LocalSiteDirectory::new,
                 () -> mock(ProxyPlayerTransfer.class));
@@ -60,7 +57,7 @@ class NetworkLayerTest {
     @Test
     @DisplayName("with nothing configured, each seam takes the best that can run")
     void autoTakesWhatIsAvailable() {
-        assertTrue(layer.directory() instanceof LocalSiteDirectory, "Redis is not usable, so the local one is left");
+        assertTrue(layer.directory() instanceof LocalSiteDirectory, "NATS is not configured, so the local one is left");
         assertTrue(layer.bus() instanceof VelocityMessageBus);
     }
 
@@ -186,5 +183,20 @@ class NetworkLayerTest {
     @DisplayName("without NATS there is no Placement service, so hosts come from the directory as before")
     void hostsFallBackToTheDirectory() {
         assertTrue(layer.hosts() instanceof DirectorySiteHosts);
+    }
+
+    @Test
+    @DisplayName("a lone server without NATS runs on the local transports")
+    void loneServerNeedsNoNetwork() {
+        assertTrue(layer.bus() instanceof VelocityMessageBus);
+        assertTrue(layer.directory() instanceof LocalSiteDirectory);
+        assertTrue(layer.transfer() instanceof ProxyPlayerTransfer);
+        assertTrue(layer.hosts() instanceof DirectorySiteHosts);
+    }
+
+    @Test
+    @DisplayName("the suite ships no Redis client")
+    void noJedis() {
+        assertThrows(ClassNotFoundException.class, () -> Class.forName("redis.clients.jedis.Jedis"));
     }
 }

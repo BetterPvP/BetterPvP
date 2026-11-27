@@ -66,7 +66,7 @@ if [[ -n ${BPVP_DB_HOST:-} ]]; then
   set_yaml "$core" .core.database.global.maxPoolSize "${BPVP_DB_POOL:-10}"
 fi
 
-# Any other setting, one per line: <file> <yq path> <value>, e.g. "plugins/Core/config.yml .core.redis.enabled false".
+# Any other setting, one per line: <file> <yq path> <value>, e.g. "plugins/Core/config.yml .core.network.bus nats".
 while read -r file path value; do
   [[ -n $file ]] && set_yaml "$file" "$path" "$value"
 done <<<"${BPVP_CONFIG_SET:-}"

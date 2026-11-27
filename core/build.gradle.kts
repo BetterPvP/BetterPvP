@@ -31,7 +31,6 @@ dependencies {
     api(project(":structure-format"))
     implementation(libs.reflections)
     implementation(libs.hikari.cp)
-    implementation(libs.jedis)
     implementation(project(":network-protocol"))
     implementation(project(":sessions"))
     // BouncyCastle is only for NKey and JWT sign-in, which the network does not use

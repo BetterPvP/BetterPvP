@@ -1,0 +1,18 @@
+agones:
+  controller:
+    replicas: 1
+  extensions:
+    replicas: 1
+  ping:
+    install: false
+  allocator:
+    install: true
+    replicas: 1
+    processor:
+      replicas: 1
+    service:
+      serviceType: ClusterIP
+gameservers:
+  namespaces:
+    - bpvp
+    - shulker-system

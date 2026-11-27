@@ -93,5 +93,15 @@ if [[ -n ${ASSETS_BUCKET:-} ]]; then
 fi
 
 echo "Starting $role on build ${BPVP_REVISION:-dev} with $(wc -l < .bpvp-jars) plugin jars"
+# Under Agones, health follows the Paper process, so a slow start or a long tick never gets the server deleted.
+if [[ -n ${AGONES_SDK_HTTP_PORT:-} ]]; then
+  (
+    while kill -0 $$ 2>/dev/null; do
+      curl -fsS -m 2 -o /dev/null -X POST -H 'Content-Type: application/json' -d '{}' "http://localhost:$AGONES_SDK_HTTP_PORT/health" 2>/dev/null || true
+      sleep 5
+    done
+  ) &
+fi
+
 # shellcheck disable=SC2086
 exec java ${JAVA_OPTS:--XX:MaxRAMPercentage=75 -XX:+UseG1GC} -jar paper.jar --nogui --world-container worlds ${SERVER_ARGS:-}

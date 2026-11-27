@@ -14,6 +14,8 @@ include(":game")
 include(":hub")
 include(":orchestration")
 include(":orchestration-service")
+include(":ledger")
+include(":ledger-service")
 include(":proxy")
 
 if (File("./private/").exists()) {

@@ -1,14 +1,20 @@
 package me.mykindos.betterpvp.core.trade.currency;
 
+import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
 import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.trade.TradeCurrency;
+import me.mykindos.betterpvp.ledger.LedgerReceipt;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.Material;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Gold, as held in {@link GamerProperty#BALANCE}.
@@ -19,6 +25,13 @@ import org.jetbrains.annotations.NotNull;
  */
 @Singleton
 public class BalanceCurrency implements TradeCurrency {
+
+    private final Ledger ledger;
+
+    @Inject
+    public BalanceCurrency(@NotNull Ledger ledger) {
+        this.ledger = ledger;
+    }
 
     @Override
     public @NotNull String getKey() {
@@ -41,8 +54,7 @@ public class BalanceCurrency implements TradeCurrency {
     }
 
     @Override
-    public void transfer(@NotNull Gamer from, @NotNull Gamer to, int amount) {
-        from.saveProperty(GamerProperty.BALANCE, from.getBalance() - amount);
-        to.saveProperty(GamerProperty.BALANCE, to.getBalance() + amount);
+    public @NotNull CompletableFuture<Boolean> transfer(@NotNull Gamer from, @NotNull Gamer to, int amount) {
+        return ledger.move(LedgerParty.of(from), LedgerParty.of(to), amount, "trade").thenApply(LedgerReceipt::isPosted);
     }
 }

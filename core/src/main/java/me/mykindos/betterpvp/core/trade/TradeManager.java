@@ -296,11 +296,16 @@ public class TradeManager {
     }
 
     private void settle(@NotNull TradeSession session) {
-        final TradeCancelReason failure = settlement.settle(session);
-        if (failure != null) {
-            cancel(session, failure);
-            return;
-        }
+        settlement.settle(session).thenAccept(failure -> {
+            if (failure != null) {
+                cancel(session, failure);
+            } else {
+                completed(session);
+            }
+        });
+    }
+
+    private void completed(@NotNull TradeSession session) {
 
         sessions.remove(session.getInitiator().getPlayer());
         sessions.remove(session.getTarget().getPlayer());
@@ -343,6 +348,9 @@ public class TradeManager {
 
         final Set<TradeSession> live = new HashSet<>(sessions.values());
         for (TradeSession session : live) {
+            if (session.getState() == TradeState.SETTLING) {
+                continue;
+            }
             if (Bukkit.getPlayer(session.getInitiator().getPlayer()) == null
                     || Bukkit.getPlayer(session.getTarget().getPlayer()) == null) {
                 cancel(session, TradeCancelReason.DISCONNECTED);

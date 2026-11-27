@@ -15,6 +15,8 @@ import me.mykindos.betterpvp.core.framework.blockbreak.packet.BlockBreakProgress
 import me.mykindos.betterpvp.core.framework.blockbreak.packet.BlockBreakProgressServiceImpl;
 import me.mykindos.betterpvp.core.framework.blockbreak.resolver.BlockBreakResolver;
 import me.mykindos.betterpvp.core.framework.blockbreak.resolver.DefaultBlockBreakResolver;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerProvider;
 import me.mykindos.betterpvp.core.framework.net.NetModule;
 import me.mykindos.betterpvp.core.framework.server.CrossServerMessageService;
 import me.mykindos.betterpvp.core.framework.server.VelocityCrossServerMessageService;
@@ -49,6 +51,7 @@ public class CoreInjectorModule extends AbstractModule {
         bind(GlobalBlockBreakRules.class).to(GlobalBlockBreakRulesImpl.class);
         bind(BlockBreakResolver.class).to(DefaultBlockBreakResolver.class);
         bind(BlockBreakProgressService.class).to(BlockBreakProgressServiceImpl.class);
+        bind(Ledger.class).toProvider(LedgerProvider.class);
         log.info("Using default integrations").submit();
     }
 }

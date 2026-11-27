@@ -3,9 +3,10 @@ package me.mykindos.betterpvp.core.framework.economy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.config.Config;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
@@ -13,6 +14,8 @@ import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
+import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -32,10 +35,12 @@ public class CoinDeathListener implements Listener {
     private boolean dropCoinsOnDeath;
 
     private final ClientManager clientManager;
+    private final Ledger ledger;
 
     @Inject
-    public CoinDeathListener(ClientManager clientManager) {
+    public CoinDeathListener(ClientManager clientManager, Ledger ledger) {
         this.clientManager = clientManager;
+        this.ledger = ledger;
     }
 
     public ItemStack generateDrops(int coinAmount) {
@@ -68,13 +73,22 @@ public class CoinDeathListener implements Listener {
 
         // Calculate the final drop amount including all bonuses
         final int dropAmount = coinDropEvent.getTotalDropAmount(percentCoinsDroppedOnDeath);
-        gamer.saveProperty(GamerProperty.BALANCE, Math.max(0, gamer.getBalance() - dropAmount));
-        UtilMessage.message(player, "core.prefix.death", "core.economy.coins_lost",
-                Translations.component("core.economy.coins_amount", Component.text(UtilFormat.formatNumber(dropAmount))).color(NamedTextColor.YELLOW));
-
-        ItemStack coinItem = generateDrops(dropAmount);
-        if (coinItem != null) {
-            player.getWorld().dropItemNaturally(player.getLocation(), coinItem);
+        final long lost = Math.min(dropAmount, gamer.getBalance());
+        if (lost <= 0) {
+            return;
         }
+        final Location location = player.getLocation();
+        ledger.move(LedgerParty.of(gamer), LedgerParty.system(LedgerAccounts.WORLD), lost, "death.drop").thenAccept(receipt -> {
+            if (!receipt.isPosted()) {
+                return;
+            }
+            UtilMessage.message(player, "core.prefix.death", "core.economy.coins_lost",
+                    Translations.component("core.economy.coins_amount", Component.text(UtilFormat.formatNumber(dropAmount))).color(NamedTextColor.YELLOW));
+
+            ItemStack coinItem = generateDrops(dropAmount);
+            if (coinItem != null) {
+                location.getWorld().dropItemNaturally(location, coinItem);
+            }
+        });
     }
 }

@@ -6,14 +6,17 @@ import lombok.CustomLog;
 import lombok.Getter;
 import lombok.Setter;
 import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Movement;
 import me.mykindos.betterpvp.core.item.ItemFactory;
 import me.mykindos.betterpvp.core.item.ItemRegistry;
 import me.mykindos.betterpvp.core.item.component.impl.uuid.UUIDProperty;
 import me.mykindos.betterpvp.core.logging.LogContext;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import me.mykindos.betterpvp.shops.auctionhouse.events.AuctionBuyEvent;
 import me.mykindos.betterpvp.shops.auctionhouse.events.AuctionCancelEvent;
 import me.mykindos.betterpvp.shops.auctionhouse.repository.AuctionRepository;
@@ -23,7 +26,9 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Singleton
 @Getter
@@ -34,14 +39,19 @@ public class AuctionManager {
     private final ItemFactory itemFactory;
     private final ClientManager clientManager;
     private final AuctionRepository auctionRepository;
+    private final Ledger ledger;
 
     private final List<Auction> activeAuctions = new ArrayList<>();
+    /** Listings whose purchase is waiting on the ledger, so a second click cannot buy them again. */
+    private final Set<Long> buying = ConcurrentHashMap.newKeySet();
 
     @Setter
     private IAuctionDeliveryService deliveryService = new DefaultAuctionDeliveryService();
 
     @Inject
-    public AuctionManager(ItemRegistry itemRegistry, ItemFactory itemFactory, ClientManager clientManager, AuctionRepository auctionRepository) {
+    public AuctionManager(ItemRegistry itemRegistry, ItemFactory itemFactory, ClientManager clientManager,
+                          AuctionRepository auctionRepository, Ledger ledger) {
+        this.ledger = ledger;
         this.itemRegistry = itemRegistry;
         this.itemFactory = itemFactory;
         this.clientManager = clientManager;
@@ -85,9 +95,31 @@ public class AuctionManager {
             return;
         }
 
-        Client buyer = clientManager.search().online(player);
-        buyer.getGamer().saveProperty(GamerProperty.BALANCE.name(), buyer.getGamer().getBalance() - auction.getSellPrice());
+        if (auction.isSold() || !buying.add(auction.getAuctionID())) {
+            UtilMessage.message(player, "core.prefix.auction-house", "shops.auctionhouse.already-sold");
+            return;
+        }
 
+        // The reference makes the listing sell once across every server.
+        final Client buyer = clientManager.search().online(player);
+        final Movement payment = new Movement(LedgerParty.of(buyer.getGamer()), LedgerParty.system(LedgerAccounts.AUCTION_HOUSE),
+                auction.getSellPrice(), "auction.buy");
+        ledger.post(List.of(payment), "auction:" + auction.getAuctionID()).thenAccept(receipt -> {
+            buying.remove(auction.getAuctionID());
+            if (receipt.isPosted() && !auction.isSold()) {
+                completePurchase(player, auction);
+                return;
+            }
+            final String reason = switch (receipt.getStatus()) {
+                case DUPLICATE, POSTED -> "shops.auctionhouse.already-sold";
+                case INSUFFICIENT_FUNDS -> "shops.listener.auctionhouse.insufficient-funds";
+                default -> "core.ledger.unavailable";
+            };
+            UtilMessage.message(player, "core.prefix.auction-house", reason);
+        });
+    }
+
+    private void completePurchase(Player player, Auction auction) {
         auction.setSold(true);
         getAuctionRepository().setSold(auction, true);
         getAuctionRepository().saveAuctionTransaction(player.getUniqueId(), auction);

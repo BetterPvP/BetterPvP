@@ -3,6 +3,7 @@
 #   deploy/network-check.sh event                 event scales from 0 to 1 and back
 #   deploy/network-check.sh placement             Placement fills one camp server, then allocates a second
 #   deploy/network-check.sh drain                 a deleted camp server drains, reports no room and stops cleanly
+#   deploy/network-check.sh handover              a camp opened from the console counts, and moves when its server drains
 #   deploy/network-check.sh rollout <image>       a new server image replaces every Ready server of ROLES
 # Run deploy/check.sh first for the fleets, services and proxies.
 set -euo pipefail
@@ -31,16 +32,22 @@ servers() { kubectl -n "$NS" get gameservers -l "agones.dev/fleet=$1" -o json; }
 count_state() { servers "$1" | jq --arg s "$2" '[.items[] | select(.status.state == $s)] | length'; }
 has_state() { (( $(count_state "$1" "$2") >= $3 )); }
 
-# Asks Placement for an owned camp once per owner, from one pod, and prints each answer's payload.
+# Asks Placement for an owned camp once per owner, from one pod, and prints each answer's payload. A request with
+# no reply in time prints the outcome "no answer", since Placement may still have placed it.
 place_camps() {
   local owners=$1 script=""
   for owner in $owners; do
-    script+="nats req -s nats://nats:4222 --timeout 10s bpvp.bus.placement.place "
+    script+="out=\$(nats req -s nats://nats:4222 --timeout 30s bpvp.bus.placement.place "
     script+="'{\"v\":1,\"topic\":\"placement.place\",\"origin\":\"network-check\",\"correlationId\":\"camp-$owner\",\"reply\":false,"
-    script+="\"payload\":{\"site\":\"camp\",\"owner\":\"$owner\",\"owned\":\"true\",\"asker\":\"network-check\"}}' 2>&1 | grep '^{';"
+    script+="\"payload\":{\"site\":\"camp\",\"owner\":\"$owner\",\"owned\":\"true\",\"asker\":\"network-check\"}}' 2>&1 | grep '^{');"
+    script+="if [ -n \"\$out\" ]; then echo \"\$out\"; else echo '{\"payload\":{\"outcome\":\"no answer\"}}'; fi;"
   done
-  kubectl -n "$NS" run "placement-$RANDOM" --rm -i --restart=Never --quiet --image=natsio/nats-box:0.18.1 \
-    --command -- sh -c "$script" | tr -d '\015' | jq -c '.payload'
+  # One pod for every request, run with exec: a pod per batch drops output when it ends before its log is read.
+  if ! kubectl -n "$NS" get pod network-check-nats >/dev/null 2>&1; then
+    kubectl -n "$NS" run network-check-nats --restart=Never --image=natsio/nats-box:0.18.1 --command -- sleep 3600 >/dev/null
+  fi
+  kubectl -n "$NS" wait --for=condition=Ready pod/network-check-nats --timeout=120s >/dev/null
+  kubectl -n "$NS" exec network-check-nats -- sh -c "$script" | jq -c '.payload'
 }
 
 event() {
@@ -74,12 +81,14 @@ placement() {
   wait_for 600 has_state camp Ready 1 || fail "no spare camp server came up"
   local owners=""
   for i in $(seq 1 $(( capacity + 2 ))); do owners+="$(( base + i )) "; done
-  local on_first=0 second=""
+  local on_first=0 unanswered=0 second=""
   while IFS= read -r answer; do
     server=$(jq -r '.server // empty' <<<"$answer")
     outcome=$(jq -r '.outcome // empty' <<<"$answer")
     if [[ $server == "$first" ]]; then
       on_first=$(( on_first + 1 ))
+    elif [[ $outcome == "no answer" ]]; then
+      unanswered=$(( unanswered + 1 ))
     elif [[ -n $server && $outcome == allocated ]]; then
       second=$server
       break
@@ -88,10 +97,16 @@ placement() {
     fi
   done < <(place_camps "$owners")
   [[ -n $second ]] || fail "Placement never allocated a second camp server"
+  echo "$first" > "${TMPDIR:-/tmp}/bpvp-first-camp"
+  local hosted
+  hosted=$(slots "$first" count)
   ok "$first took $on_first more camps until full, then Placement allocated $second"
+  (( unanswered == 0 )) || echo "note: $unanswered requests got no answer within 30s, and Placement may have counted them"
+  # Every slot not already hosting a camp should have been offered before a second server was allocated.
+  (( on_first + unanswered + 1 + hosted >= capacity )) ||
+    fail "$first had $(( capacity - hosted - on_first - unanswered - 1 )) free slots left when Placement allocated $second"
   [[ $(kubectl -n "$NS" get gameserver "$second" -o jsonpath='{.status.state}') == Allocated ]] ||
     fail "$second was not allocated"
-  echo "$first" > "${TMPDIR:-/tmp}/bpvp-first-camp"
 }
 
 drain() {
@@ -123,6 +138,54 @@ drain() {
   ok "a new camp went to $(jq -r '.server' <<<"$answer"), not the drained $first"
 }
 
+# Runs an admin command on a server's console.
+console() { timeout 20 kubectl -n "$NS" attach -i "$1" -c minecraft-server <<<"$2" >/dev/null 2>&1 || true; }
+
+counts_at_least() { [[ $(slots "$1" count) -ge $2 ]]; }
+
+# Without build assets a server has no camp template, so it gets a copy of its own world as one.
+camp_template() {
+  MSYS_NO_PATHCONV=1 kubectl -n "$NS" exec "$1" -c minecraft-server -- sh -c '
+    [ -e worlds/templates/camp ] || [ -e worlds/templates/camp.polar ] && exit 0
+    mkdir -p worlds/templates && cp -r worlds/world worlds/templates/camp && rm -f worlds/templates/camp/session.lock
+    echo "made a camp template from its own world"' | sed "s/^/note: $1 /"
+}
+
+handover() {
+  wait_for 600 has_state camp Ready 1 || fail "no Ready camp server"
+  local owner=$(( (RANDOM << 15 | RANDOM) * 100 + 7 )) answer first second
+  answer=$(place_camps "$owner")
+  first=$(jq -r '.server // empty' <<<"$answer")
+  [[ -n $first ]] || fail "Placement placed no camp: $answer"
+  local before
+  before=$(slots "$first" count)
+  camp_template "$first"
+  console "$first" "site create camp $owner"
+  wait_for 120 counts_at_least "$first" $(( before + 1 )) || fail "$first did not count the camp it opened"
+  ok "$first opened camp $owner, and its camp-slots count went from $before to $(slots "$first" count)"
+
+  wait_for 600 has_state camp Ready 1 || fail "no spare camp server to hand over to"
+  kubectl -n "$NS" delete gameserver "$first" --wait=false >/dev/null
+  wait_for 120 bash -c "! kubectl -n $NS get gameserver $first >/dev/null 2>&1" || fail "$first did not stop"
+  ok "$first drained and stopped"
+  local saved
+  saved=$(kubectl -n "$NS" exec postgres-1 -c postgres -- psql -U postgres -d betterpvp -At \
+    -c "select version from site_records where site = 'camp' and owner = $owner" | tr -d '\r')
+  [[ -n $saved ]] || fail "$first did not save camp $owner's record before stopping"
+  ok "$first saved camp $owner's record (version $saved) before letting it go"
+  wait_for 600 has_state camp Ready 1 || fail "no camp server to hand over to"
+
+  answer=$(place_camps "$owner")
+  second=$(jq -r '.server // empty' <<<"$answer")
+  [[ -n $second && $second != "$first" ]] || fail "Placement did not move camp $owner off $first: $answer"
+  ok "$first gave up camp $owner's lease, and Placement now sends it to $second ($(jq -r .outcome <<<"$answer"))"
+  before=$(slots "$second" count)
+  camp_template "$second"
+  console "$second" "site create camp $owner"
+  wait_for 120 counts_at_least "$second" $(( before + 1 )) || fail "$second did not reopen camp $owner"
+  ok "$second reopened camp $owner, and its camp-slots count went from $before to $(slots "$second" count)"
+}
+
 rollout() {
   local image=${1:?usage: network-check.sh rollout <image>}
   local roles=${ROLES:-hub resource camp dungeon event}
@@ -145,6 +208,7 @@ case ${1:-} in
   event) event ;;
   placement) placement ;;
   drain) drain ;;
+  handover) handover ;;
   rollout) shift; rollout "$@" ;;
-  *) sed -n '2,7p' "$0"; exit 1 ;;
+  *) sed -n '2,8p' "$0"; exit 1 ;;
 esac

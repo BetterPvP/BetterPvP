@@ -16,7 +16,9 @@ spec:
       version:
         channel: Paper
         name: "26.3"
-      config: {}
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
       podOverrides:
         image:
           name: __IMAGE__
@@ -78,7 +80,9 @@ spec:
       version:
         channel: Paper
         name: "26.3"
-      config: {}
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
       podOverrides:
         image:
           name: __IMAGE__
@@ -140,7 +144,9 @@ spec:
       version:
         channel: Paper
         name: "26.3"
-      config: {}
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
       podOverrides:
         image:
           name: __IMAGE__
@@ -202,7 +208,9 @@ spec:
       version:
         channel: Paper
         name: "26.3"
-      config: {}
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
       podOverrides:
         image:
           name: __IMAGE__
@@ -264,7 +272,9 @@ spec:
       version:
         channel: Paper
         name: "26.3"
-      config: {}
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
       podOverrides:
         image:
           name: __IMAGE__

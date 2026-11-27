@@ -1,7 +1,7 @@
 package me.mykindos.betterpvp.core.world.site;
 
 import com.google.inject.AbstractModule;
-import me.mykindos.betterpvp.core.world.site.storage.LocalSiteStorage;
+import me.mykindos.betterpvp.core.world.site.storage.DatabaseSiteStorage;
 import me.mykindos.betterpvp.core.world.site.storage.SiteStorage;
 
 /**
@@ -15,7 +15,7 @@ public class SiteModule extends AbstractModule {
         bind(Placement.class).toProvider(PlacementProvider.class);
         bind(SiteInstanceStore.class).to(DatabaseSiteInstanceStore.class);
         bind(ResidencyStore.class).to(DatabaseResidencyStore.class);
-        bind(SiteStorage.class).to(LocalSiteStorage.class);
+        bind(SiteStorage.class).to(DatabaseSiteStorage.class);
         bind(PlayerWhereabouts.class).to(LocalPlayerWhereabouts.class);
     }
 }

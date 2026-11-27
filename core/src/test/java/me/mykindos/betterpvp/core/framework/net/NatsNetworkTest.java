@@ -45,6 +45,7 @@ class NatsNetworkTest {
 
     private static final Duration WAIT = Duration.ofSeconds(5);
     private static final AtomicInteger NETWORKS = new AtomicInteger();
+    private static final ServerRoom ROOMY = new ServerRoom("Clans-1", 0, 100);
 
     private static GenericContainer<?> nats;
     private static String url;
@@ -158,7 +159,7 @@ class NatsNetworkTest {
         final NatsSiteDirectory other = directory("Clans-2");
         final RemoteInstance instance = instance("camp:north", 7, "Clans-1", 3);
 
-        holder.publish(List.of(instance));
+        holder.publish(List.of(instance), ROOMY);
 
         eventually(() -> !other.lookup("camp:north", 7).join().isEmpty());
         final RemoteInstance found = other.lookup("camp:north", 7).join().get(0);
@@ -169,6 +170,23 @@ class NatsNetworkTest {
     }
 
     @Test
+    @DisplayName("the room a server reports is read by another, and a server that never reported has none")
+    void reportedRoomIsRead() throws Exception {
+        final NatsSiteDirectory camp = directory("Camp-1");
+        final NatsSiteDirectory hub = directory("Hub-1");
+
+        camp.publish(List.of(), new ServerRoom("Camp-1", 70, 72));
+
+        eventually(() -> hub.room("Camp-1").join().isPresent());
+        final ServerRoom room = hub.room("Camp-1").join().get();
+        assertEquals(70, room.getOnline());
+        assertEquals(72, room.getLimit());
+        assertTrue(room.fits(2));
+        assertFalse(room.fits(3), "a party that would not all fit is turned away");
+        assertTrue(hub.room("Camp-2").join().isEmpty());
+    }
+
+    @Test
     @DisplayName("two servers taking the last seat at once: exactly one gets it")
     void lastSeatGoesToOne() throws Exception {
         final NatsSiteDirectory first = directory("Clans-1");
@@ -176,7 +194,7 @@ class NatsNetworkTest {
 
         for (int round = 0; round < 10; round++) {
             final RemoteInstance instance = instance("dungeon", round, "Clans-1", 3);
-            first.publish(List.of(instance));
+            first.publish(List.of(instance), ROOMY);
             eventually(() -> !second.lookup("dungeon", instance.getOwnerId()).join().isEmpty());
 
             final CompletableFuture<Boolean> one = first.reserve(instance.getId(), 1, 4);
@@ -192,7 +210,7 @@ class NatsNetworkTest {
     void releasedSeatsAreFree() throws Exception {
         final NatsSiteDirectory directory = directory("Clans-1");
         final RemoteInstance instance = instance("dungeon", 1, "Clans-1", 0);
-        directory.publish(List.of(instance));
+        directory.publish(List.of(instance), ROOMY);
         eventually(() -> !directory.lookup("dungeon", 1).join().isEmpty());
 
         assertTrue(directory.reserve(instance.getId(), 2, 2).join());
@@ -251,8 +269,8 @@ class NatsNetworkTest {
         final NatsSiteDirectory busy = directory("Clans-1");
         final NatsSiteDirectory quiet = directory("Clans-2");
 
-        busy.publish(List.of(instance("camp", 1, "Clans-1", 9)));
-        quiet.publish(List.of(instance("camp", 2, "Clans-2", 1)));
+        busy.publish(List.of(instance("camp", 1, "Clans-1", 9)), ROOMY);
+        quiet.publish(List.of(instance("camp", 2, "Clans-2", 1)), ROOMY);
 
         eventually(() -> busy.serversByLoad().join().size() == 2);
         assertEquals(List.of("Clans-2", "Clans-1"), busy.serversByLoad().join());

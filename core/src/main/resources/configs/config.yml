@@ -18,6 +18,9 @@ core:
     bus: auto
     directory: auto
     transfer: auto
+  agones:
+    # How many camps a camp server holds at once.
+    campSlots: 6
   tips:
     timeBetweenTips: 150.0
   exceptions:

@@ -6,16 +6,19 @@ import me.mykindos.betterpvp.core.framework.net.DirectorySiteHosts;
 import me.mykindos.betterpvp.core.framework.net.LocalSiteDirectory;
 import me.mykindos.betterpvp.core.framework.net.PlayerTransfer;
 import me.mykindos.betterpvp.core.framework.net.RemoteInstance;
+import me.mykindos.betterpvp.core.framework.net.ServerRoom;
 import me.mykindos.betterpvp.core.framework.net.SiteHosts;
 import me.mykindos.betterpvp.core.server.Realm;
 import me.mykindos.betterpvp.core.server.Season;
 import me.mykindos.betterpvp.core.server.Server;
+import net.kyori.adventure.text.Component;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.io.StringReader;
 import java.time.LocalDate;
@@ -31,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @DisplayName("Finding a party an instance anywhere on the network")
@@ -38,6 +42,7 @@ class NetworkPlacementTest {
 
     private static final String HERE = "Clans-1";
     private static final String THERE = "Clans-2";
+    private static final ServerRoom ROOMY = new ServerRoom(THERE, 0, 100);
 
     private static final String CATALOGUE = """
             hub:
@@ -117,7 +122,7 @@ class NetworkPlacementTest {
     void prefersThisServer() {
         final SiteInstance here = localInstance("hub");
         directory.publish(List.of(advertised("hub", THERE, 0),
-                new RemoteInstance(here.getId(), "hub", SiteKey.NO_OWNER, HERE, here.getWorldName(), true, 0)));
+                new RemoteInstance(here.getId(), "hub", SiteKey.NO_OWNER, HERE, here.getWorldName(), true, 0)), ROOMY);
 
         final SiteHandle handle = placement.locate(SiteKey.of("hub"), Party.solo(UUID.randomUUID())).join();
 
@@ -129,7 +134,7 @@ class NetworkPlacementTest {
     @DisplayName("a party goes to another server's instance when this server has none")
     void fallsBackToAnotherServer() {
         final RemoteInstance remote = advertised("hub", THERE, 1);
-        directory.publish(List.of(remote));
+        directory.publish(List.of(remote), ROOMY);
 
         final SiteHandle handle = placement.locate(SiteKey.of("hub"), Party.solo(UUID.randomUUID())).join();
 
@@ -141,7 +146,7 @@ class NetworkPlacementTest {
     @Test
     @DisplayName("an instance that is full is passed over, and a new one is made instead")
     void fullRemoteInstanceIsPassedOver() {
-        directory.publish(List.of(advertised("hub", THERE, 4)));
+        directory.publish(List.of(advertised("hub", THERE, 4)), ROOMY);
         final SiteInstance made = localInstance("hub");
 
         final SiteHandle handle = placement.locate(SiteKey.of("hub"), Party.solo(UUID.randomUUID())).join();
@@ -154,7 +159,7 @@ class NetworkPlacementTest {
     @DisplayName("seats taken for a party still travelling count against the next party's room")
     void reservedSeatsCountAgainstCapacity() {
         final RemoteInstance remote = advertised("hub", THERE, 2);
-        directory.publish(List.of(remote));
+        directory.publish(List.of(remote), ROOMY);
 
         final SiteHandle first = placement.locate(SiteKey.of("hub"),
                 Party.of(UUID.randomUUID(), java.util.Set.of(UUID.randomUUID()))).join();
@@ -237,6 +242,26 @@ class NetworkPlacementTest {
         assertEquals(List.of("Tester -> " + THERE), transfers.sent);
         assertTrue(directory.claimArrival(traveller.getUniqueId()).join().isPresent(),
                 "the server they land on has to be told why they came");
+    }
+
+    @Test
+    @DisplayName("a player sent to a full server is told so and stays where they are")
+    void aFullServerTurnsTravellersAway() {
+        final Player traveller = mock(Player.class);
+        when(traveller.getUniqueId()).thenReturn(UUID.randomUUID());
+        when(traveller.getName()).thenReturn("Member");
+        final RemoteInstance camp = advertised("camp", THERE, 12);
+        directory.publish(List.of(camp), new ServerRoom(THERE, 72, 72));
+
+        final boolean sent = placement.sendAll(List.of(traveller),
+                new SiteHandle(camp.getId(), SiteKey.of("camp", 7), THERE, camp.getWorld())).join();
+
+        assertFalse(sent);
+        assertTrue(transfers.sent.isEmpty(), "nobody should be moved toward a full server");
+        assertTrue(directory.claimArrival(traveller.getUniqueId()).join().isEmpty());
+        final ArgumentCaptor<Component> told = ArgumentCaptor.forClass(Component.class);
+        verify(traveller).sendMessage(told.capture());
+        assertTrue(told.getValue().toString().contains("core.site.server_full"), told.getValue().toString());
     }
 
     @Test

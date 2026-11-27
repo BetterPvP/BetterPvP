@@ -11,6 +11,7 @@ import me.mykindos.betterpvp.core.framework.net.NatsMessageBus;
 import me.mykindos.betterpvp.core.framework.net.NatsSiteDirectory;
 import me.mykindos.betterpvp.core.framework.net.PlacementSiteHosts;
 import me.mykindos.betterpvp.core.framework.net.RemoteInstance;
+import me.mykindos.betterpvp.core.framework.net.ServerRoom;
 import me.mykindos.betterpvp.core.playerstate.session.NatsPlayerLeases;
 import me.mykindos.betterpvp.core.playerstate.session.PlayerHandoff;
 import me.mykindos.betterpvp.ledger.NatsLedgerTransport;
@@ -84,7 +85,7 @@ public final class FakeServer implements AutoCloseable {
     /** Advertises an open instance of the site, which is how a host keeps its lease. */
     public void advertise(@NotNull String site, long owner, int occupants) {
         directory.publish(List.of(new RemoteInstance(UUID.nameUUIDFromBytes((site + owner).getBytes()), site, owner,
-                name, site + "/" + owner, true, occupants)));
+                name, site + "/" + owner, true, occupants)), new ServerRoom(name, occupants, 100));
     }
 
     /** Sends a clan write the way {@code ServiceClanWriter} does and waits for the service's answer. */

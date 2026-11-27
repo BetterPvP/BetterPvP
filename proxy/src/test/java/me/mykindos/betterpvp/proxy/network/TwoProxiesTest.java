@@ -180,8 +180,12 @@ class TwoProxiesTest {
         first.join(player);
         eventually(() -> second.presence.elsewhere(player).isPresent());
 
-        // proxy-a never says goodbye and stops sending its roster and heartbeat.
-        Thread.sleep(1_500);
+        // proxy-a never says goodbye and stops sending its roster and heartbeat, while proxy-b keeps beating.
+        final long quietUntil = System.nanoTime() + Duration.ofMillis(1_500).toNanos();
+        while (System.nanoTime() < quietUntil) {
+            second.logins.heartbeat();
+            Thread.sleep(200);
+        }
 
         assertEquals(NetworkLogins.Verdict.ACCEPTED, second.join(player));
     }

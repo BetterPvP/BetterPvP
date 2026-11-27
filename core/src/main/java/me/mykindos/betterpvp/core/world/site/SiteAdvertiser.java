@@ -4,9 +4,11 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.framework.net.RemoteInstance;
+import me.mykindos.betterpvp.core.framework.net.ServerRoom;
 import me.mykindos.betterpvp.core.framework.net.SiteDirectory;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
+import org.bukkit.Bukkit;
 import org.bukkit.event.Listener;
 import org.jetbrains.annotations.NotNull;
 
@@ -43,6 +45,6 @@ public class SiteAdvertiser implements Listener {
                     instance.getState() == SiteInstance.State.READY, instance.getOccupants().size()));
         }
 
-        directory.publish(held);
+        directory.publish(held, new ServerRoom(server, Bukkit.getOnlinePlayers().size(), Bukkit.getMaxPlayers()));
     }
 }

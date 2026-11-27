@@ -26,9 +26,11 @@ public class LocalSiteDirectory implements SiteDirectory {
     private final Map<UUID, RemoteInstance> instances = new ConcurrentHashMap<>();
     private final Map<UUID, Integer> reserved = new ConcurrentHashMap<>();
     private final Map<UUID, Arrival> expected = new ConcurrentHashMap<>();
+    private final Map<String, ServerRoom> rooms = new ConcurrentHashMap<>();
 
     @Override
-    public void publish(@NotNull Collection<RemoteInstance> published) {
+    public void publish(@NotNull Collection<RemoteInstance> published, @NotNull ServerRoom room) {
+        rooms.put(room.getServer(), room);
         instances.keySet().retainAll(published.stream().map(RemoteInstance::getId).toList());
         published.forEach(instance -> instances.put(instance.getId(), instance));
     }
@@ -68,6 +70,11 @@ public class LocalSiteDirectory implements SiteDirectory {
     public @NotNull CompletableFuture<String> stickyHost(@NotNull String siteId, long ownerId,
                                                          @NotNull String candidate) {
         return CompletableFuture.completedFuture(candidate);
+    }
+
+    @Override
+    public @NotNull CompletableFuture<Optional<ServerRoom>> room(@NotNull String server) {
+        return CompletableFuture.completedFuture(Optional.ofNullable(rooms.get(server)));
     }
 
     @Override

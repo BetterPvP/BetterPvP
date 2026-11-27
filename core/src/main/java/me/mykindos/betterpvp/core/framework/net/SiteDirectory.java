@@ -23,7 +23,7 @@ public interface SiteDirectory {
      * Called on a heartbeat rather than on every change, so an entry that stops being refreshed expires by itself.
      * A server that crashes therefore leaves nothing behind for anybody to clean up.
      */
-    void publish(@NotNull Collection<RemoteInstance> instances);
+    void publish(@NotNull Collection<RemoteInstance> instances, @NotNull ServerRoom room);
 
     /** Every live instance of a site across the network, this server's included. */
     @NotNull CompletableFuture<List<RemoteInstance>> lookup(@NotNull String siteId, long ownerId);
@@ -50,6 +50,9 @@ public interface SiteDirectory {
      * @return whoever holds it, which is {@code candidate} only if this call is what claimed it
      */
     @NotNull CompletableFuture<String> stickyHost(@NotNull String siteId, long ownerId, @NotNull String candidate);
+
+    /** The room a server last reported, or empty when it has not reported or has stopped. */
+    @NotNull CompletableFuture<Optional<ServerRoom>> room(@NotNull String server);
 
     /** The servers reporting in, emptiest first, for deciding where a new instance should be made. */
     @NotNull CompletableFuture<List<String>> serversByLoad();

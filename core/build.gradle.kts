@@ -62,6 +62,8 @@ dependencies {
     testImplementation(libs.packetevents)
     testImplementation("org.mockito:mockito-core:5.23.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
+    // Site storage tests run their statements and migrations against a real Postgres.
+    testImplementation("io.zonky.test:embedded-postgres:2.1.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

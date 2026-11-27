@@ -22,12 +22,6 @@ public final class LedgerProtocol {
      */
     public static final String OPEN = "ledger.open";
 
-    private static final String COUNT = "count";
-    private static final String REFERENCE = "reference";
-    private static final String STATUS = "status";
-    private static final String SEQUENCE = "sequence";
-    private static final String ACCOUNT = "account";
-    private static final String OPENING = "opening";
     private static final String BALANCE_PREFIX = "balance.";
 
     private LedgerProtocol() {
@@ -36,7 +30,7 @@ public final class LedgerProtocol {
     public static @NotNull Map<String, String> encode(@NotNull LedgerPosting posting) {
         final Map<String, String> map = new HashMap<>();
         final List<LedgerEntry> entries = posting.getEntries();
-        map.put(COUNT, Integer.toString(entries.size()));
+        map.put("count", Integer.toString(entries.size()));
         for (int i = 0; i < entries.size(); i++) {
             final LedgerEntry entry = entries.get(i);
             map.put(i + ".from", entry.getFrom());
@@ -45,55 +39,55 @@ public final class LedgerProtocol {
             map.put(i + ".reason", entry.getReason());
         }
         if (posting.getReference() != null) {
-            map.put(REFERENCE, posting.getReference());
+            map.put("reference", posting.getReference());
         }
         return map;
     }
 
     /** @throws IllegalArgumentException if the map is not a posting */
     public static @NotNull LedgerPosting decodePosting(@NotNull Map<String, String> map) {
-        final int count = Integer.parseInt(required(map, COUNT));
+        final int count = Integer.parseInt(required(map, "count"));
         final List<LedgerEntry> entries = new ArrayList<>(count);
         for (int i = 0; i < count; i++) {
             entries.add(new LedgerEntry(required(map, i + ".from"), required(map, i + ".to"),
                     Long.parseLong(required(map, i + ".amount")), required(map, i + ".reason")));
         }
-        return new LedgerPosting(List.copyOf(entries), map.get(REFERENCE));
+        return new LedgerPosting(List.copyOf(entries), map.get("reference"));
     }
 
     public static @NotNull Map<String, String> encodeOpen(@NotNull String account, long opening) {
         final Map<String, String> map = new HashMap<>();
-        map.put(ACCOUNT, account);
-        map.put(OPENING, Long.toString(opening));
+        map.put("account", account);
+        map.put("opening", Long.toString(opening));
         return map;
     }
 
     public static @NotNull String openAccount(@NotNull Map<String, String> map) {
-        return required(map, ACCOUNT);
+        return required(map, "account");
     }
 
     public static long openingBalance(@NotNull Map<String, String> map) {
-        return Long.parseLong(required(map, OPENING));
+        return Long.parseLong(required(map, "opening"));
     }
 
     public static @NotNull Map<String, String> encode(@NotNull LedgerReceipt receipt) {
         final Map<String, String> map = new HashMap<>();
-        map.put(STATUS, receipt.getStatus().name());
-        map.put(SEQUENCE, Long.toString(receipt.getSequence()));
+        map.put("status", receipt.getStatus().name());
+        map.put("sequence", Long.toString(receipt.getSequence()));
         receipt.getBalances().forEach((account, balance) -> map.put(BALANCE_PREFIX + account, Long.toString(balance)));
         return map;
     }
 
     /** @throws IllegalArgumentException if the map is not a receipt */
     public static @NotNull LedgerReceipt decodeReceipt(@NotNull Map<String, String> map) {
-        final LedgerStatus status = LedgerStatus.valueOf(required(map, STATUS));
+        final LedgerStatus status = LedgerStatus.valueOf(required(map, "status"));
         final Map<String, Long> balances = new HashMap<>();
         map.forEach((key, value) -> {
             if (key.startsWith(BALANCE_PREFIX)) {
                 balances.put(key.substring(BALANCE_PREFIX.length()), Long.parseLong(value));
             }
         });
-        return new LedgerReceipt(status, Map.copyOf(balances), Long.parseLong(map.getOrDefault(SEQUENCE, "0")));
+        return new LedgerReceipt(status, Map.copyOf(balances), Long.parseLong(map.getOrDefault("sequence", "0")));
     }
 
     private static @NotNull String required(@NotNull Map<String, String> map, @NotNull String key) {

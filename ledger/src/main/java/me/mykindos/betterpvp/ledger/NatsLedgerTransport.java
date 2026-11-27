@@ -2,6 +2,9 @@ package me.mykindos.betterpvp.ledger;
 
 import io.nats.client.Connection;
 import io.nats.client.Message;
+import me.mykindos.betterpvp.network.protocol.EnvelopeCodec;
+import me.mykindos.betterpvp.network.protocol.NetworkEnvelope;
+import me.mykindos.betterpvp.network.protocol.Subjects;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -10,15 +13,22 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
-/** Asks the ledger service over NATS, on a subject named after the topic. */
+/**
+ * Asks the ledger service over NATS, on the bus subject of the topic, and takes the first reply. The connection
+ * belongs to whoever made it.
+ */
 public class NatsLedgerTransport implements LedgerTransport {
 
     private final Connection connection;
+    private final String prefix;
     private final String origin;
     private final Duration timeout;
+    private final EnvelopeCodec codec = new EnvelopeCodec();
 
-    public NatsLedgerTransport(@NotNull Connection connection, @NotNull String origin, @NotNull Duration timeout) {
+    public NatsLedgerTransport(@NotNull Connection connection, @NotNull String prefix, @NotNull String origin,
+                               @NotNull Duration timeout) {
         this.connection = connection;
+        this.prefix = prefix;
         this.origin = origin;
         this.timeout = timeout;
     }
@@ -28,10 +38,10 @@ public class NatsLedgerTransport implements LedgerTransport {
         if (!isAvailable()) {
             return CompletableFuture.completedFuture(LedgerReceipt.of(LedgerStatus.UNAVAILABLE));
         }
-        final LedgerEnvelope request = new LedgerEnvelope(topic, origin, UUID.randomUUID().toString(), false, payload);
+        final NetworkEnvelope request = new NetworkEnvelope(topic, origin, UUID.randomUUID().toString(), false, payload);
         try {
-            return connection.requestWithTimeout(topic, request.toBytes(), timeout)
-                    .thenApply(NatsLedgerTransport::receipt)
+            return connection.requestWithTimeout(Subjects.bus(prefix, topic), codec.encode(request), timeout)
+                    .thenApply(this::receipt)
                     .exceptionally(ex -> LedgerReceipt.of(LedgerStatus.UNAVAILABLE));
         } catch (RuntimeException ex) {
             return CompletableFuture.completedFuture(LedgerReceipt.of(LedgerStatus.UNAVAILABLE));
@@ -43,18 +53,9 @@ public class NatsLedgerTransport implements LedgerTransport {
         return connection.getStatus() == Connection.Status.CONNECTED;
     }
 
-    @Override
-    public void close() {
+    private @NotNull LedgerReceipt receipt(@NotNull Message message) {
         try {
-            connection.close();
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    private static @NotNull LedgerReceipt receipt(@NotNull Message message) {
-        try {
-            return LedgerProtocol.decodeReceipt(LedgerEnvelope.fromBytes(message.getData()).payloadOrEmpty());
+            return LedgerProtocol.decodeReceipt(codec.decode(message.getData()).getPayload());
         } catch (IOException | IllegalArgumentException ex) {
             return LedgerReceipt.of(LedgerStatus.UNAVAILABLE);
         }

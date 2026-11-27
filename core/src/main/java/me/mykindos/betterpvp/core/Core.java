@@ -19,7 +19,6 @@ import me.mykindos.betterpvp.core.config.ConfigInjectorModule;
 import me.mykindos.betterpvp.core.coretips.CoreTipLoader;
 import me.mykindos.betterpvp.core.database.Database;
 import me.mykindos.betterpvp.core.framework.BPvPPlugin;
-import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerProvider;
 import me.mykindos.betterpvp.core.framework.net.NetworkLayer;
 import me.mykindos.betterpvp.core.world.site.storage.SiteStorage;
 import me.mykindos.betterpvp.core.framework.CurrentMode;
@@ -216,9 +215,6 @@ public class Core extends BPvPPlugin {
 
         injector.getInstance(NetworkLayer.class).close();
         log.info("Network layer closed").submit();
-
-        injector.getInstance(LedgerProvider.class).close();
-        log.info("Ledger closed").submit();
 
         injector.getInstance(SiteStorage.class).close();
         log.info("Site storage closed").submit();

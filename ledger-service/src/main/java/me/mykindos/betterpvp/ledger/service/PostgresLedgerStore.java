@@ -28,10 +28,6 @@ import java.util.TreeSet;
  */
 public class PostgresLedgerStore implements LedgerStore {
 
-    private static final int ATTEMPTS = 5;
-    private static final String DEADLOCK = "40P01";
-    private static final String SERIALIZATION_FAILURE = "40001";
-
     private final DataSource dataSource;
 
     public PostgresLedgerStore(@NotNull DataSource dataSource) {
@@ -219,8 +215,9 @@ public class PostgresLedgerStore implements LedgerStore {
                     throw ex;
                 }
             } catch (SQLException ex) {
-                final boolean retryable = DEADLOCK.equals(ex.getSQLState()) || SERIALIZATION_FAILURE.equals(ex.getSQLState());
-                if (!retryable || attempt >= ATTEMPTS) {
+                // Deadlock or serialization failure: Postgres aborted this one so the other could finish.
+                final boolean retryable = "40P01".equals(ex.getSQLState()) || "40001".equals(ex.getSQLState());
+                if (!retryable || attempt >= 5) {
                     throw new IllegalStateException("Ledger transaction failed", ex);
                 }
             }

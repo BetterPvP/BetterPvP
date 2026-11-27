@@ -10,8 +10,11 @@ dependencies {
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
     api(libs.annotations)
-    implementation(libs.jackson.databind)
-    api("io.nats:jnats:2.21.1")
+    api(project(":network-protocol"))
+    // BouncyCastle is only for NKey and JWT sign-in, which the network does not use
+    api(libs.jnats) {
+        exclude(group = "org.bouncycastle")
+    }
     testImplementation(libs.junit.jupiter)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }

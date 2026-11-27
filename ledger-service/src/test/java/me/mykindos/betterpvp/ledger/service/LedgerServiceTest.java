@@ -10,6 +10,7 @@ import me.mykindos.betterpvp.ledger.LedgerPosting;
 import me.mykindos.betterpvp.ledger.LedgerProtocol;
 import me.mykindos.betterpvp.ledger.LedgerReceipt;
 import me.mykindos.betterpvp.ledger.LedgerStatus;
+import me.mykindos.betterpvp.network.protocol.Subjects;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -59,7 +60,7 @@ class LedgerServiceTest {
                 POSTGRES.getPassword(), 16);
         LedgerServiceApplication.migrate(dataSource);
         serviceConnection = Nats.connect(natsUrl());
-        endpoint = new NatsLedgerEndpoint(serviceConnection, new LedgerRequests(new PostgresLedgerStore(dataSource)),
+        endpoint = new NatsLedgerEndpoint(serviceConnection, Subjects.DEFAULT_PREFIX, new LedgerRequests(new PostgresLedgerStore(dataSource)),
                 Executors.newFixedThreadPool(16));
         endpoint.start();
         serviceConnection.flush(Duration.ofSeconds(5));
@@ -224,10 +225,12 @@ class LedgerServiceTest {
     /** A game server's side of the wire: its own NATS connection and the transport the plugin uses. */
     private static final class GameServer implements AutoCloseable {
 
+        private final Connection connection;
         private final NatsLedgerTransport transport;
 
         GameServer(String name) throws Exception {
-            this.transport = new NatsLedgerTransport(Nats.connect(natsUrl()), name, Duration.ofSeconds(10));
+            this.connection = Nats.connect(natsUrl());
+            this.transport = new NatsLedgerTransport(connection, Subjects.DEFAULT_PREFIX, name, Duration.ofSeconds(10));
         }
 
         LedgerReceipt post(LedgerPosting posting) {
@@ -245,8 +248,8 @@ class LedgerServiceTest {
         }
 
         @Override
-        public void close() {
-            transport.close();
+        public void close() throws InterruptedException {
+            connection.close();
         }
     }
 }

@@ -16,6 +16,7 @@ include(":orchestration")
 include(":orchestration-service")
 include(":ledger")
 include(":ledger-service")
+include(":network-protocol")
 include(":proxy")
 
 if (File("./private/").exists()) {
@@ -142,6 +143,10 @@ dependencyResolutionManagement {
 
             // Library - Redis
             library("jedis", "redis.clients", "jedis").version("5.2.0")
+
+            // Library - NATS
+            library("jnats", "io.nats", "jnats").version("2.27.0")
+            library("testcontainers", "org.testcontainers", "testcontainers").version("2.0.5")
 
             // Bundled Libraries
             bundle("test", listOf("junit-jupiter", "mockbukkit", "paper-api-test"))

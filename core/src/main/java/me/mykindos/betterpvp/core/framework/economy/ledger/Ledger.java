@@ -12,7 +12,7 @@ import java.util.concurrent.CompletableFuture;
  * Every movement of coins goes through here. A player's {@code BALANCE} property is what the ledger last said it is.
  * <p>
  * Futures complete on the main thread. A ledger that can answer at once completes them before returning, so code
- * that reacts in {@code thenAccept} runs in the same tick it did before the ledger existed.
+ * that reacts in {@code thenAccept} runs in the same tick as the call.
  */
 public interface Ledger {
 

@@ -27,7 +27,7 @@ import java.util.concurrent.Executor;
  * Answers arrive in any order, so each account remembers the sequence of the answer it last took and ignores older
  * ones.
  */
-public class ServiceLedger implements Ledger, AutoCloseable {
+public class ServiceLedger implements Ledger {
 
     private final LedgerTransport transport;
     private final Executor mainThread;
@@ -72,11 +72,6 @@ public class ServiceLedger implements Ledger, AutoCloseable {
     @Override
     public boolean isAvailable() {
         return transport.isAvailable();
-    }
-
-    @Override
-    public void close() {
-        transport.close();
     }
 
     private static void track(@NotNull LedgerParty party, @NotNull Map<String, Gamer> gamers) {

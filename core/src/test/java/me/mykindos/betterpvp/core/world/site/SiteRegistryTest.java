@@ -88,11 +88,11 @@ class SiteRegistryTest {
     }
 
     @Test
-    @DisplayName("a camp is owned, kept on disk, and goes dormant rather than being destroyed")
+    @DisplayName("a camp is owned, built as a slime world, and goes dormant rather than being destroyed")
     void camp() {
         final Site camp = site("camp");
         assertEquals(SitePolicy.Lifecycle.OWNED, camp.getPolicy().getLifecycle());
-        assertEquals(WorldSource.Kind.OWN, camp.getWorldSource().getKind());
+        assertEquals(WorldSource.Kind.SLIME, camp.getWorldSource().getKind());
         assertEquals(SitePolicy.Dormancy.UNLOAD_WHEN_EMPTY, camp.getPolicy().getDormancy());
         assertFalse(camp.getPolicy().reapsWhenEmpty(), "a camp is never destroyed");
         assertEquals(300, camp.getPolicy().getDormancyGraceSeconds());

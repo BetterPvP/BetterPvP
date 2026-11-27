@@ -16,6 +16,7 @@ dependencies {
     implementation("org.tomlj:tomlj:1.1.1")
     implementation(libs.postgres)
     implementation(project(":network-protocol"))
+    implementation(project(":sessions"))
     // BouncyCastle is only for NKey and JWT sign-in, which the network does not use
     implementation(libs.jnats) {
         exclude(group = "org.bouncycastle")
@@ -23,6 +24,7 @@ dependencies {
 
     testImplementation(libs.junit.jupiter)
     testImplementation(libs.testcontainers)
+    testImplementation(project(":sessions-service"))
     testImplementation(libs.velocity.api)
     testImplementation("org.slf4j:slf4j-api:2.0.16")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

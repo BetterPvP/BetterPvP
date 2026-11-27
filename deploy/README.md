@@ -80,9 +80,13 @@ BPVP_BUILD_LOCAL=1 PLUGIN_DIR=~/Downloads/plugins deploy/up.sh
 kubectl -n bpvp scale fleet event --replicas 1
 ```
 
-Change a fleet on its `MinecraftServerFleet`, never on the Agones `Fleet`, because Shulker writes the Fleet back. `manifests/fleets.yaml` adds the Agones counters (`players`, `camp-slots`) and the stop grace beside Shulker's fields.
+Each role has a Shulker `MinecraftServerFleet` named `<role>-template`, kept at no servers, which Shulker builds the server config from. `up.sh` copies its Agones Fleet into the role's own Fleet with the replicas, buffer and counters (`players`, `camp-slots`) from `manifests/fleets.json`, loose health, a 45 second stop grace and a console. Change replicas and buffers in `fleets.json` and server settings in `manifests/servers.yaml`, then run `up.sh` again.
 
 Servers stay healthy for Agones while Paper runs, so a slow start or a long tick never gets one deleted.
+
+Core reports each server Ready once Paper has started, with its counters and drain. Shulker's server agent is left out, because its earlier Ready undid allocations.
+
+An admin command can be typed into a server's console with `kubectl -n bpvp attach -i <gameserver> -c minecraft-server`.
 
 The proxies turn every connection away, server list pings too, while no hub is Ready.
 
@@ -134,17 +138,20 @@ The check asks Placement for a hub the way a joining proxy does, which allocates
 deploy/network-check.sh event       # event scales from 0 to 1 and back
 deploy/network-check.sh placement   # Placement fills one camp server, then allocates a second
 deploy/network-check.sh drain       # the first camp server, deleted, reports no room, stops in its grace and gets no new camps
+deploy/network-check.sh handover    # a camp opened from the console counts, is saved when its server drains and reopens on another
 deploy/network-check.sh rollout bpvp.local/server:local-2   # after up.sh with that image, every Ready server runs it
 ```
 
-Run `placement` before `drain`, on a `camp` fleet allowed two servers. Allocated servers keep their image until they stop.
+Run `placement`, `drain` and `handover` in that order, one at a time, on a `camp` fleet allowed two servers. Allocated servers keep their image until they stop.
+
+`handover` opens a camp with `site create camp <owner>` on a server's console (`kubectl attach -i`). Without build assets there is no camp template, so it copies the server's own world as one.
 
 On a machine with 8 GB for Docker, run the roles in batches with `BUFFER_MAX` so the spares fit:
 
 ```bash
 BPVP_BUILD_LOCAL=1 PLUGIN_DIR=~/Downloads/plugins ROLES="hub resource" BUFFER_MAX=1 deploy/up.sh && ROLES="hub resource" deploy/check.sh
 BPVP_BUILD_LOCAL=1 BPVP_SKIP_BUILD=1 ROLES="dungeon event" BUFFER_MAX=1 deploy/up.sh && deploy/network-check.sh event
-BPVP_BUILD_LOCAL=1 BPVP_SKIP_BUILD=1 ROLES=camp BUFFER_MAX=2 deploy/up.sh && deploy/network-check.sh placement && deploy/network-check.sh drain
+BPVP_BUILD_LOCAL=1 BPVP_SKIP_BUILD=1 ROLES=camp BUFFER_MAX=2 deploy/up.sh && deploy/network-check.sh placement && deploy/network-check.sh drain && deploy/network-check.sh handover
 ```
 
 ## Down

@@ -48,7 +48,7 @@ for gs in $(kubectl -n "$NS" get gameservers -l betterpvp.net/role -o name); do
 done
 echo "ok: every server declares the players and camp-slots counters"
 
-# Shulker's agent reports a server Ready even when Core failed, so each server's log must show Core running.
+# A server can be Ready with a BetterPvP plugin broken, so each server's log must show Core running.
 for gs in $(kubectl -n "$NS" get gameservers -l betterpvp.net/role -o name); do
   log=$(kubectl -n "$NS" logs "${gs#*/}" -c minecraft-server 2>/dev/null || true)
   if grep -E "Error occurred while enabling (Core|Clans|Champions|Shops|Progression|Dungeons|Events|Store) " <<<"$log"; then

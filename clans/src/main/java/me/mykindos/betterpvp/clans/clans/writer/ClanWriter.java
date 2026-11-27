@@ -66,7 +66,7 @@ public interface ClanWriter {
 
     void saveVault(@NotNull Clan clan);
 
-    /** Completes once the mailbox may be opened again. */
+    /** Completes once the save is handed off, after which this server may open the mailbox again. */
     @NotNull CompletableFuture<Void> saveMailbox(@NotNull Clan clan);
 
     /** Persists a chunk the clan just added to its territory, as {@link UtilWorld#chunkToFile} names it. */

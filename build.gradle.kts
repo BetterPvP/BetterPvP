@@ -75,6 +75,7 @@ subprojects {
         maven("https://repo.codemc.io/repository/maven-snapshots/")
         maven("https://repo.opencollab.dev/main/")
         maven("https://repo.polar.top/repository/polar/")
+        maven("https://repo.minehub.live/releases")
         maven("https://mvn.lib.co.nz/public/")
         maven {
           url =  uri("http://repo.mykindos.me:8081/repository/maven-public/")

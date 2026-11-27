@@ -55,6 +55,9 @@ dependencies {
     compileOnly(libs.packetevents)
     compileOnly(libs.bundles.paper)
     compileOnly(libs.fawe)
+    compileOnly("live.minehub:polarpaper:2.3.1") {
+        isTransitive = false
+    }
     compileOnly(libs.fawebukkit) {
         exclude(group = "org.lz4", module = "lz4-java")
     }
@@ -72,6 +75,8 @@ dependencies {
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
     // Real Postgres and NATS servers for the store and transport tests, which skip when Docker is not running
     testImplementation(libs.testcontainers)
+    // Site storage tests run their statements and migrations against a real Postgres.
+    testImplementation("io.zonky.test:embedded-postgres:2.1.0")
     // The handoff tests run two servers against a real sessions service
     testImplementation(project(":sessions-service"))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")

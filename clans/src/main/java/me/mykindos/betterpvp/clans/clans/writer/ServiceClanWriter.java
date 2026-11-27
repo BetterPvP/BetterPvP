@@ -3,20 +3,28 @@ package me.mykindos.betterpvp.clans.clans.writer;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import lombok.CustomLog;
+import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
+import me.mykindos.betterpvp.clans.clans.ClanProperty;
 import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
 import me.mykindos.betterpvp.clans.protocol.ClanMutation;
 import me.mykindos.betterpvp.clans.protocol.ClanOp;
 import me.mykindos.betterpvp.clans.protocol.ClanReply;
 import me.mykindos.betterpvp.clans.protocol.ClanTopics;
 import me.mykindos.betterpvp.core.Core;
+import me.mykindos.betterpvp.core.components.clans.IClan;
+import me.mykindos.betterpvp.core.components.clans.data.ClanEnemy;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
 import me.mykindos.betterpvp.core.framework.net.BusMessage;
 import me.mykindos.betterpvp.core.framework.net.MessageBus;
+import me.mykindos.betterpvp.core.utilities.UtilServer;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Sends every clan write to the Clans service, the network's only writer of clans.
@@ -25,17 +33,24 @@ import java.util.List;
  * receives them and announces each one, and every server, this one included, re-reads the clans it names through
  * {@link ClanChangeFeed}. A write the service refuses, or never answers, is undone the same way: the clans are re-read
  * and this server's copy goes back to what is stored.
+ * <p>
+ * Property writes for a clan are gathered for a few ticks and sent together. A clan's balance is never sent: the
+ * ledger keeps it.
  */
 @CustomLog
 @Singleton
 public class ServiceClanWriter implements ClanWriter {
 
+    private final Clans clans;
     private final MessageBus bus;
     private final ClanChangeFeed feed;
     private final ClanRepository repository;
+    private final Map<Long, Map<String, String>> queuedProperties = new ConcurrentHashMap<>();
 
     @Inject
-    public ServiceClanWriter(@NotNull MessageBus bus, @NotNull ClanChangeFeed feed, @NotNull ClanRepository repository) {
+    public ServiceClanWriter(@NotNull Clans clans, @NotNull MessageBus bus, @NotNull ClanChangeFeed feed,
+                             @NotNull ClanRepository repository) {
+        this.clans = clans;
         this.bus = bus;
         this.feed = feed;
         this.repository = repository;
@@ -57,6 +72,7 @@ public class ServiceClanWriter implements ClanWriter {
     @Override
     public void disband(@NotNull Clan clan) {
         repository.forgetQueuedProperties(clan);
+        queuedProperties.remove(clan.getId());
         send(mutation(ClanOp.DISBAND, clan).build());
     }
 
@@ -122,6 +138,68 @@ public class ServiceClanWriter implements ClanWriter {
                 .build());
     }
 
+    @Override
+    public void saveProperty(@NotNull Clan clan, @NotNull String property, @NotNull Object value) {
+        if (property.equals(ClanProperty.BALANCE.name())) {
+            return;
+        }
+        final boolean first = queuedProperties.isEmpty();
+        queuedProperties.computeIfAbsent(clan.getId(), id -> new ConcurrentHashMap<>()).put(property, value.toString());
+        if (first && clans.isEnabled()) {
+            UtilServer.runTaskLater(clans, () -> flushProperties(true), 5L);
+        }
+    }
+
+    @Override
+    public void flushProperties(boolean async) {
+        for (Long clanId : List.copyOf(queuedProperties.keySet())) {
+            final Map<String, String> properties = queuedProperties.remove(clanId);
+            if (properties != null && !properties.isEmpty()) {
+                send(ClanMutation.builder().op(ClanOp.PROPERTIES).clan(clanId).properties(Map.copyOf(properties))
+                        .build());
+            }
+        }
+    }
+
+    @Override
+    public void setCore(@NotNull Clan clan) {
+        send(mutation(ClanOp.CORE, clan).value(ClanRepository.encodeHome(clan)).build());
+    }
+
+    @Override
+    public void setBanner(@NotNull Clan clan) {
+        send(mutation(ClanOp.BANNER, clan).value(ClanRepository.encodeBanner(clan)).build());
+    }
+
+    @Override
+    public void saveVault(@NotNull Clan clan) {
+        send(mutation(ClanOp.VAULT, clan).value(clan.getCore().getVault().serialize()).build());
+    }
+
+    @Override
+    public @NotNull CompletableFuture<Void> saveMailbox(@NotNull Clan clan) {
+        send(mutation(ClanOp.MAILBOX, clan).value(clan.getCore().getMailbox().serialize()).build());
+        return CompletableFuture.completedFuture(null);
+    }
+
+    @Override
+    public void claim(@NotNull Clan clan, @NotNull String chunk) {
+        send(mutation(ClanOp.CLAIM, clan).value(chunk).build());
+    }
+
+    @Override
+    public void unclaim(@NotNull Clan clan, @NotNull String chunk) {
+        send(mutation(ClanOp.UNCLAIM, clan).value(chunk).build());
+    }
+
+    @Override
+    public void setDominance(@NotNull IClan clan, @NotNull ClanEnemy enemy) {
+        send(ClanMutation.builder().op(ClanOp.DOMINANCE).clan(clan.getId())
+                .other(enemy.getClan().getId())
+                .value(Integer.toString((int) enemy.getDominance()))
+                .build());
+    }
+
     private static @NotNull ClanMutation.ClanMutationBuilder mutation(@NotNull ClanOp op, @NotNull Clan clan) {
         return ClanMutation.builder().op(op).clan(clan.getId());
     }
@@ -139,7 +217,7 @@ public class ServiceClanWriter implements ClanWriter {
                     if (!reply.isApplied()) {
                         log.warn("The Clans service did not apply {} to clan {}: {}", mutation.getOp(),
                                 mutation.getClan(), reply.getError()).submit();
-                        feed.refresh(affected, mutation.getOp() == ClanOp.CAMP_PERMISSION);
+                        feed.refresh(affected, ClanChangeFeed.partsOf(mutation.getOp()));
                     }
                 });
     }

@@ -124,7 +124,8 @@ public class AuctionManager {
         getAuctionRepository().setSold(auction, true);
         getAuctionRepository().saveAuctionTransaction(player.getUniqueId(), auction);
 
-        getDeliveryService().deliverCurrency(auction.getSeller(), (int) (auction.getSellPrice() * 0.95));
+        getDeliveryService().deliverCurrency(auction.getSeller(), (int) (auction.getSellPrice() * 0.95),
+                "auction-proceeds:" + auction.getAuctionID());
 
         if (getDeliveryService().deliverAuction(player.getUniqueId(), auction)) {
             auction.setDelivered(true);

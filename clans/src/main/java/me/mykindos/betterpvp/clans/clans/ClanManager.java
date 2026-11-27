@@ -1,6 +1,7 @@
 package me.mykindos.betterpvp.clans.clans;
 
 import com.google.inject.Inject;
+import com.google.inject.Provider;
 import com.google.inject.Singleton;
 import lombok.CustomLog;
 import lombok.Getter;
@@ -14,6 +15,7 @@ import me.mykindos.betterpvp.clans.clans.pillage.Pillage;
 import me.mykindos.betterpvp.clans.clans.pillage.PillageHandler;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageStartEvent;
 import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.clans.clans.zone.ClanZones;
 import me.mykindos.betterpvp.clans.utilities.ClansNamespacedKeys;
 import me.mykindos.betterpvp.core.client.Client;
@@ -81,6 +83,9 @@ public class ClanManager extends Manager<Long, Clan> {
     @Getter
     private final ZoneManager zoneManager;
 
+    // A provider, since the writer reads clans through this manager.
+    private final Provider<ClanWriter> writer;
+
     private Map<Integer, Double> dominanceScale;
 
     @Getter
@@ -125,8 +130,10 @@ public class ClanManager extends Manager<Long, Clan> {
     private int maxClanMembers;
 
     @Inject
-    public ClanManager(Clans clans, ClanRepository repository, ClientManager clientManager, PillageHandler pillageHandler, LeaderboardManager leaderboardManager, ZoneManager zoneManager) {
+    public ClanManager(Clans clans, ClanRepository repository, ClientManager clientManager, PillageHandler pillageHandler, LeaderboardManager leaderboardManager, ZoneManager zoneManager,
+                       Provider<ClanWriter> writer) {
         this.clans = clans;
+        this.writer = writer;
         this.repository = repository;
         this.clientManager = clientManager;
         this.pillageHandler = pillageHandler;
@@ -852,8 +859,8 @@ public class ClanManager extends Manager<Long, Clan> {
                 UtilMessage.deserialize(getDominanceString(killer, killed))
         }, null, true);
 
-        getRepository().updateDominance(killed, killedEnemy);
-        getRepository().updateDominance(killer, killerEnemy);
+        writer.get().setDominance(killed, killedEnemy);
+        writer.get().setDominance(killer, killerEnemy);
 
         if (killerEnemy.getDominance() == 100) {
             UtilServer.callEvent(new PillageStartEvent(new Pillage(killer, killed)));

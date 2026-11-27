@@ -14,5 +14,17 @@ public enum ClanOp {
     TRUST,
     ENEMY,
     UNENEMY,
-    CAMP_PERMISSION
+    CAMP_PERMISSION,
+    /** Sets the clan properties named in {@link ClanMutation#getProperties()}. */
+    PROPERTIES,
+    /** Moves the clan core to {@link ClanMutation#getValue()}, or removes it when that is empty. */
+    CORE,
+    BANNER,
+    VAULT,
+    MAILBOX,
+    /** Claims the chunk named in {@link ClanMutation#getValue()}. */
+    CLAIM,
+    UNCLAIM,
+    /** Sets the clan's dominance over {@link ClanMutation#getOther()} to {@link ClanMutation#getValue()}. */
+    DOMINANCE
 }

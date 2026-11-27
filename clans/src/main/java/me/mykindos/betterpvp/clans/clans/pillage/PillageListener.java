@@ -11,6 +11,7 @@ import me.mykindos.betterpvp.clans.clans.alert.ClanAlerts;
 import me.mykindos.betterpvp.clans.clans.insurance.Insurance;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageEndEvent;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageStartEvent;
+import me.mykindos.betterpvp.clans.clans.writer.ClanBank;
 import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.client.offlinemessages.OfflineMessage;
 import me.mykindos.betterpvp.core.client.offlinemessages.OfflineMessagesHandler;
@@ -69,10 +70,13 @@ public class PillageListener implements Listener {
     private final DamageLogManager damageLogManager;
     private final OfflineMessagesHandler offlineMessagesHandler;
     private final ClanWriter writer;
+    private final ClanBank bank;
     private final ClanAlerts alerts;
 
     @Inject
-    public PillageListener(Clans clans, ClanManager clanManager, PillageHandler pillageHandler, DamageLogManager damageLogManager, OfflineMessagesHandler offlineMessagesHandler, ClanWriter writer, ClanAlerts alerts) {
+    public PillageListener(Clans clans, ClanManager clanManager, PillageHandler pillageHandler, DamageLogManager damageLogManager, OfflineMessagesHandler offlineMessagesHandler, ClanWriter writer, ClanAlerts alerts,
+                           ClanBank bank) {
+        this.bank = bank;
         this.clans = clans;
         this.clanManager = clanManager;
         this.pillageHandler = pillageHandler;
@@ -114,16 +118,20 @@ public class PillageListener implements Listener {
 
         int amountEarnedFromBank = (int) (pillaged.getBalance() * 0.50);
         if(amountEarnedFromBank > 0) {
-            pillager.saveProperty(ClanProperty.BALANCE.name(), pillager.getBalance() + amountEarnedFromBank);
-            pillaged.saveProperty(ClanProperty.BALANCE.name(), pillaged.getBalance() - amountEarnedFromBank);
-
-            pillager.messageClan("clans.pillage.bank-deposited", new Object[]{
-                    Component.text("$" + UtilFormat.formatNumber(amountEarnedFromBank), NamedTextColor.GREEN)
-            }, null, true);
-            pillaged.messageClan("clans.pillage.bank-taken", new Object[]{
-                    Component.text("$" + UtilFormat.formatNumber(amountEarnedFromBank), NamedTextColor.RED)
-            }, null, true);
-
+            bank.move(bank.account(pillaged), bank.account(pillager), amountEarnedFromBank, "clan.pillage")
+                    .thenAccept(receipt -> {
+                        if (!receipt.isPosted()) {
+                            log.warn("{} could not take ${} from {}'s bank: {}", pillager.getName(), amountEarnedFromBank,
+                                    pillaged.getName(), receipt.getStatus()).submit();
+                            return;
+                        }
+                        pillager.messageClan("clans.pillage.bank-deposited", new Object[]{
+                                Component.text("$" + UtilFormat.formatNumber(amountEarnedFromBank), NamedTextColor.GREEN)
+                        }, null, true);
+                        pillaged.messageClan("clans.pillage.bank-taken", new Object[]{
+                                Component.text("$" + UtilFormat.formatNumber(amountEarnedFromBank), NamedTextColor.RED)
+                        }, null, true);
+                    });
         }
 
         pillaged.putProperty(ClanProperty.NO_DOMINANCE_COOLDOWN, (System.currentTimeMillis() + (3_600_000L * noDominanceCooldownHours)));

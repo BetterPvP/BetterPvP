@@ -6,10 +6,13 @@ import com.google.inject.Singleton;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
 import me.mykindos.betterpvp.clans.world.camp.CampPermissions;
+import me.mykindos.betterpvp.core.components.clans.IClan;
 import me.mykindos.betterpvp.core.components.clans.data.ClanAlliance;
 import me.mykindos.betterpvp.core.components.clans.data.ClanEnemy;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
 import org.jetbrains.annotations.NotNull;
+
+import java.util.concurrent.CompletableFuture;
 
 /** Writes straight to Postgres from this server, for a network of one server where nothing else writes clans. */
 @Singleton
@@ -92,5 +95,50 @@ public class LocalClanWriter implements ClanWriter {
     @Override
     public void setCampPermission(long clanId, @NotNull CampGrant grant) {
         campPermissions.get().apply(clanId, grant);
+    }
+
+    @Override
+    public void saveProperty(@NotNull Clan clan, @NotNull String property, @NotNull Object value) {
+        repository.saveProperty(clan, property, value);
+    }
+
+    @Override
+    public void flushProperties(boolean async) {
+        repository.processPropertyUpdates(async);
+    }
+
+    @Override
+    public void setCore(@NotNull Clan clan) {
+        repository.updateClanCore(clan);
+    }
+
+    @Override
+    public void setBanner(@NotNull Clan clan) {
+        repository.updateClanBanner(clan);
+    }
+
+    @Override
+    public void saveVault(@NotNull Clan clan) {
+        repository.updateClanVault(clan);
+    }
+
+    @Override
+    public @NotNull CompletableFuture<Void> saveMailbox(@NotNull Clan clan) {
+        return repository.updateClanMailbox(clan);
+    }
+
+    @Override
+    public void claim(@NotNull Clan clan, @NotNull String chunk) {
+        repository.saveClanTerritory(clan, chunk);
+    }
+
+    @Override
+    public void unclaim(@NotNull Clan clan, @NotNull String chunk) {
+        repository.deleteClanTerritory(clan, chunk);
+    }
+
+    @Override
+    public void setDominance(@NotNull IClan clan, @NotNull ClanEnemy enemy) {
+        repository.updateDominance(clan, enemy);
     }
 }

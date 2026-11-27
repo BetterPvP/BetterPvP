@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.events.ClanBannerUpdateEvent;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import org.bukkit.event.EventHandler;
@@ -13,13 +14,16 @@ import org.bukkit.event.EventPriority;
 @Singleton
 public class ClanBannerListener extends ClanListener {
 
+    private final ClanWriter writer;
+
     @Inject
-    public ClanBannerListener(ClanManager clanManager, ClientManager clientManager) {
+    public ClanBannerListener(ClanManager clanManager, ClientManager clientManager, ClanWriter writer) {
         super(clanManager, clientManager);
+        this.writer = writer;
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     public void onSave(ClanBannerUpdateEvent event) {
-        clanManager.getRepository().updateClanBanner(event.getClan());
+        writer.setBanner(event.getClan());
     }
 }

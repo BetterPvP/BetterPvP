@@ -167,6 +167,49 @@ class LedgerServiceTest {
     }
 
     @Test
+    void depositingIntoOneClanBankFromTwoServersAtOnceEndsWithTheRightBalance() throws Exception {
+        final long clanOpening = 250;
+        final long deposit = 100;
+        final int depositsEach = 3;
+        final String clan = LedgerAccounts.clan(ThreadLocalRandom.current().nextLong(1, Long.MAX_VALUE));
+        assertEquals(clanOpening, serverA.open(clan, clanOpening).balance(clan).orElseThrow());
+        final List<String> depositors = new ArrayList<>();
+        for (int i = 0; i < 20; i++) {
+            final String player = LedgerAccounts.player(UUID.randomUUID());
+            serverA.open(player, OPENING);
+            depositors.add(player);
+        }
+
+        final ExecutorService threads = Executors.newFixedThreadPool(depositors.size());
+        final List<Callable<List<LedgerReceipt>>> deposits = new ArrayList<>();
+        for (int i = 0; i < depositors.size(); i++) {
+            final GameServer server = i % 2 == 0 ? serverA : serverB;
+            final String player = depositors.get(i);
+            deposits.add(() -> {
+                final List<LedgerReceipt> receipts = new ArrayList<>();
+                for (int d = 0; d < depositsEach; d++) {
+                    receipts.add(server.post(LedgerPosting.of(new LedgerEntry(player, clan, deposit, "clan.bank.deposit"))));
+                }
+                return receipts;
+            });
+        }
+        for (Future<List<LedgerReceipt>> future : threads.invokeAll(deposits)) {
+            for (LedgerReceipt receipt : future.get()) {
+                assertTrue(receipt.isPosted(), "unexpected " + receipt.getStatus());
+                assertTrue(receipt.balance(clan).isPresent(), "a posting answers the clan's balance");
+            }
+        }
+        threads.shutdown();
+
+        assertEquals(clanOpening + depositors.size() * depositsEach * deposit, balance(clan));
+        for (String player : depositors) {
+            assertEquals(OPENING - depositsEach * deposit, balance(player));
+        }
+        assertEquals(LedgerStatus.INSUFFICIENT_FUNDS, serverB.post(LedgerPosting.of(
+                new LedgerEntry(clan, depositors.getFirst(), balance(clan) + 1, "clan.bank.withdraw"))).getStatus());
+    }
+
+    @Test
     void aPlayerCannotGoBelowZero() throws Exception {
         final String player = LedgerAccounts.player(UUID.randomUUID());
         serverA.open(player, 100);

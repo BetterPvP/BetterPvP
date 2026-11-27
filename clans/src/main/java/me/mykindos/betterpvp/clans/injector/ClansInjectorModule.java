@@ -11,6 +11,8 @@ import me.mykindos.betterpvp.clans.clans.fatigue.factor.PlayerDeathFactor;
 import me.mykindos.betterpvp.clans.clans.fatigue.factor.RepeatKillerFactor;
 import me.mykindos.betterpvp.clans.clans.fatigue.punishment.FatiguePunishment;
 import me.mykindos.betterpvp.clans.clans.fatigue.punishment.SlownessPunishment;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriterProvider;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampProfessions;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampSettlers;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampTraits;
@@ -58,6 +60,8 @@ public class ClansInjectorModule extends AbstractModule {
         Multibinder.newSetBinder(binder(), MoraleBoost.class).addBinding().to(GreatBell.class);
         bind(ProsperityStore.class).to(DatabaseProsperityStore.class);
         bind(CasualtyStore.class).to(DatabaseCasualtyStore.class);
+        // Eager, so a server writing through the Clans service is listening for changes from the start.
+        bind(ClanWriter.class).toProvider(ClanWriterProvider.class).asEagerSingleton();
 
     }
 

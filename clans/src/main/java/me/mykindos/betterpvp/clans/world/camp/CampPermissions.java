@@ -4,6 +4,8 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
+import me.mykindos.betterpvp.clans.clans.writer.CampGrant;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
 import me.mykindos.betterpvp.core.world.construction.ConstructionAction;
 import me.mykindos.betterpvp.core.world.settler.SettlerAction;
@@ -11,6 +13,7 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.EnumSet;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
@@ -24,12 +27,15 @@ public class CampPermissions {
     private final ClanManager clanManager;
     private final CampStore store;
     private final CampConfig config;
+    private final ClanWriter writer;
 
     @Inject
-    public CampPermissions(@NotNull ClanManager clanManager, @NotNull CampStore store, @NotNull CampConfig config) {
+    public CampPermissions(@NotNull ClanManager clanManager, @NotNull CampStore store, @NotNull CampConfig config,
+                           @NotNull ClanWriter writer) {
         this.clanManager = clanManager;
         this.store = store;
         this.config = config;
+        this.writer = writer;
     }
 
     /**
@@ -70,16 +76,7 @@ public class CampPermissions {
 
     /** Grants or takes away settler {@code action} for {@code rank}. */
     public void set(long clanId, @NotNull ClanMember.MemberRank rank, @NotNull SettlerAction action, boolean allowed) {
-        store.cached(clanId).ifPresent(camp -> {
-            final Set<SettlerAction> actions = camp.ownSettlerPermissions(config.defaultSettlerPermissions())
-                    .computeIfAbsent(rank, unused -> EnumSet.noneOf(SettlerAction.class));
-            if (allowed) {
-                actions.add(action);
-            } else {
-                actions.remove(action);
-            }
-            store.changed(clanId);
-        });
+        writer.setCampPermission(clanId, new CampGrant(CampGrant.Scope.RANK_SETTLER, rank, action.name(), allowed));
     }
 
     /** Whether {@code player} may open containers in camp {@code clanId}: every member, and allies if allowed. */
@@ -104,22 +101,11 @@ public class CampPermissions {
 
     /** Grants or takes away {@code action} for allies. */
     public void setAlly(long clanId, @NotNull ConstructionAction action, boolean allowed) {
-        store.cached(clanId).ifPresent(camp -> {
-            final Set<ConstructionAction> actions = camp.ownAllyActions(config.defaultAllyActions());
-            if (allowed) {
-                actions.add(action);
-            } else {
-                actions.remove(action);
-            }
-            store.changed(clanId);
-        });
+        writer.setCampPermission(clanId, new CampGrant(CampGrant.Scope.ALLY_CONSTRUCTION, null, action.name(), allowed));
     }
 
     public void setAllyContainers(long clanId, boolean allowed) {
-        store.cached(clanId).ifPresent(camp -> {
-            camp.setAllyContainers(allowed);
-            store.changed(clanId);
-        });
+        writer.setCampPermission(clanId, new CampGrant(CampGrant.Scope.ALLY_CONTAINERS, null, null, allowed));
     }
 
     private static boolean isAlly(@NotNull Clan owner, @NotNull Player player) {
@@ -140,14 +126,33 @@ public class CampPermissions {
 
     /** Grants or takes away {@code action} for {@code rank}. */
     public void set(long clanId, @NotNull ClanMember.MemberRank rank, @NotNull ConstructionAction action, boolean allowed) {
+        writer.setCampPermission(clanId, new CampGrant(CampGrant.Scope.RANK_CONSTRUCTION, rank, action.name(), allowed));
+    }
+
+    /** Writes {@code grant} into camp {@code clanId}'s record, when this server holds the camp. */
+    public void apply(long clanId, @NotNull CampGrant grant) {
         store.cached(clanId).ifPresent(camp -> {
-            final Set<ConstructionAction> actions = camp.ownPermissions(config.defaultPermissions()).get(rank);
-            if (allowed) {
-                actions.add(action);
-            } else {
-                actions.remove(action);
+            switch (grant.getScope()) {
+                case RANK_CONSTRUCTION -> toggle(camp.ownPermissions(config.defaultPermissions())
+                                .get(Objects.requireNonNull(grant.getRank())),
+                        ConstructionAction.valueOf(grant.getAction()), grant.isAllowed());
+                case RANK_SETTLER -> toggle(camp.ownSettlerPermissions(config.defaultSettlerPermissions())
+                                .computeIfAbsent(Objects.requireNonNull(grant.getRank()),
+                                        unused -> EnumSet.noneOf(SettlerAction.class)),
+                        SettlerAction.valueOf(grant.getAction()), grant.isAllowed());
+                case ALLY_CONSTRUCTION -> toggle(camp.ownAllyActions(config.defaultAllyActions()),
+                        ConstructionAction.valueOf(grant.getAction()), grant.isAllowed());
+                case ALLY_CONTAINERS -> camp.setAllyContainers(grant.isAllowed());
             }
             store.changed(clanId);
         });
+    }
+
+    private static <T> void toggle(@NotNull Set<T> actions, @NotNull T action, boolean allowed) {
+        if (allowed) {
+            actions.add(action);
+        } else {
+            actions.remove(action);
+        }
     }
 }

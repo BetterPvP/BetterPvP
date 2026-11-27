@@ -7,6 +7,7 @@ import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.commands.ClanCommand;
 import me.mykindos.betterpvp.clans.clans.commands.ClanSubCommand;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
@@ -24,9 +25,12 @@ import java.util.Optional;
 @SubCommand(ClanCommand.class)
 public class RenameSubCommand extends ClanSubCommand {
 
+    private final ClanWriter writer;
+
     @Inject
-    public RenameSubCommand(ClanManager clanManager, ClientManager clientManager) {
+    public RenameSubCommand(ClanManager clanManager, ClientManager clientManager, ClanWriter writer) {
         super(clanManager, clientManager);
+        this.writer = writer;
     }
 
     @Override
@@ -80,7 +84,7 @@ public class RenameSubCommand extends ClanSubCommand {
             clientManager.getPlayersOfRank(Rank.ADMIN).forEach(target -> {
                 UtilMessage.message(target, Translations.component(CLANS_PREFIX), notification);
             });
-            clanManager.updateClanName(clan);
+            writer.rename(clan);
 
             log.info("{} has renamed a clan from {} to {}!", client.getName(), oldName, clanName)
                     .setAction("CLAN_RENAME").addClientContext(client, false).addClanContext(clan).submit();

@@ -73,6 +73,8 @@ docker/server/check.sh ghcr.io/betterpvp/server:local
 
 `roles.json` lists, per role, globs of jars to leave out. Case is ignored.
 
+A jar that hard-depends on a dropped one goes too, or Paper refuses to load it. Store needs MCPets, which needs MythicMobs, so camp servers leave out all three.
+
 ## Setup
 
 The workflow needs these in the repository settings. Save each key with the team's secrets.

@@ -39,6 +39,21 @@ public class PlacementSiteHosts implements SiteHosts {
         return bus.request(ask, Duration.ofSeconds(5)).thenApply(replies -> answer(siteId, ownerId, replies));
     }
 
+    @Override
+    public @NotNull CompletableFuture<Void> release(@NotNull String siteId, long ownerId, @NotNull String server) {
+        final BusMessage ask = BusMessage.of(PlacementMessages.RELEASE, Map.of(
+                PlacementMessages.SITE, siteId,
+                PlacementMessages.OWNER, String.valueOf(ownerId),
+                PlacementMessages.SERVER, server));
+
+        return bus.request(ask, Duration.ofSeconds(5)).thenAccept(replies -> {
+            if (replies.isEmpty()) {
+                // The lease still lapses a minute after this server stops advertising the site.
+                log.warn("Placement did not confirm releasing site {} of owner {}", siteId, ownerId).submit();
+            }
+        });
+    }
+
     private @NotNull Optional<String> answer(@NotNull String siteId, long ownerId, @NotNull List<BusMessage> replies) {
         if (replies.isEmpty()) {
             log.warn("Placement did not answer for site {} of owner {}", siteId, ownerId).submit();

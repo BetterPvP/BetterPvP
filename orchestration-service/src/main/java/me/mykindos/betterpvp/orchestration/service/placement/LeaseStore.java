@@ -16,6 +16,13 @@ public interface LeaseStore {
      */
     boolean claim(String siteId, long ownerId, String server, long placed, Lease replacing) throws IOException;
 
+    /**
+     * Drops the lease, only if the stored lease is still {@code current}.
+     *
+     * @return whether it was dropped. False means somebody else wrote first.
+     */
+    boolean release(String siteId, long ownerId, Lease current) throws IOException;
+
     /** Whether {@code server} is currently advertising an instance of the site, which is how a host renews. */
     boolean isAdvertised(String siteId, long ownerId, String server) throws IOException;
 }

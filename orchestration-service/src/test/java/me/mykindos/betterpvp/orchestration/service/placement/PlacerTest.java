@@ -50,6 +50,17 @@ class PlacerTest {
         }
 
         @Override
+        public boolean release(String siteId, long ownerId, Lease current) {
+            final String key = siteId + "." + ownerId;
+            final Lease stored = this.stored.get(key);
+            if (stored == null || stored.getRevision() != current.getRevision()) {
+                return false;
+            }
+            this.stored.remove(key);
+            return true;
+        }
+
+        @Override
         public boolean isAdvertised(String siteId, long ownerId, String server) {
             return advertised.contains(siteId + "." + ownerId + "@" + server);
         }
@@ -187,5 +198,31 @@ class PlacerTest {
 
         assertEquals("camp-a", decision.getServer());
         assertFalse(leases.read("dungeon", 0).isPresent());
+    }
+
+    @Test
+    @DisplayName("a draining host releases its camp, which then goes to another server and never back to it")
+    void releasedCampsMoveOffTheDrainingServer() {
+        pool.servers = List.of(new ServerPool.Slots("camp-a", 5));
+        placer.place("camp", 42, true);
+        leases.advertised.add("camp.42@camp-a");
+
+        assertTrue(placer.release("camp", 42, "camp-a"));
+        leases.advertised.clear();
+        pool.servers = List.of(new ServerPool.Slots("camp-a", 5), new ServerPool.Slots("camp-b", 3));
+
+        final PlacementDecision moved = placer.place("camp", 42, true);
+        assertEquals("camp-b", moved.getServer());
+        assertEquals("camp-b", leases.stored.get("camp.42").getServer());
+    }
+
+    @Test
+    @DisplayName("releasing a camp another server now holds leaves that lease alone")
+    void releaseOnlyDropsTheReleasersLease() {
+        pool.servers = List.of(new ServerPool.Slots("camp-b", 5));
+        placer.place("camp", 42, true);
+
+        assertFalse(placer.release("camp", 42, "camp-a"));
+        assertEquals("camp-b", leases.stored.get("camp.42").getServer());
     }
 }

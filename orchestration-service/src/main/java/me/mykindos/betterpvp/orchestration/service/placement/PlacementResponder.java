@@ -15,7 +15,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 
-/** Answers {@link PlacementMessages#PLACE} requests on the bus with what the {@link Placer} decides. */
+/**
+ * Answers {@link PlacementMessages#PLACE} and {@link PlacementMessages#RELEASE} requests on the bus with what the
+ * {@link Placer} decides.
+ */
 @Log
 public class PlacementResponder implements AutoCloseable {
 
@@ -36,6 +39,7 @@ public class PlacementResponder implements AutoCloseable {
     public void start(String prefix) {
         dispatcher = connection.createDispatcher(this::onMessage);
         dispatcher.subscribe(Subjects.bus(prefix, PlacementMessages.PLACE), "placement");
+        dispatcher.subscribe(Subjects.bus(prefix, PlacementMessages.RELEASE), "placement");
     }
 
     @Override
@@ -71,7 +75,11 @@ public class PlacementResponder implements AutoCloseable {
         final Map<String, String> reply = new HashMap<>();
 
         final String siteId = asked.get(PlacementMessages.SITE);
-        if (siteId == null) {
+        if (siteId != null && PlacementMessages.RELEASE.equals(request.getTopic())) {
+            placer.release(siteId, Long.parseLong(asked.getOrDefault(PlacementMessages.OWNER, "0")),
+                    asked.getOrDefault(PlacementMessages.SERVER, ""));
+            reply.put(PlacementMessages.OUTCOME, PlacementMessages.RELEASED);
+        } else if (siteId == null) {
             reply.put(PlacementMessages.OUTCOME, PlacementMessages.UNAVAILABLE);
             reply.put(PlacementMessages.REASON, "no site was named");
         } else {

@@ -2,6 +2,7 @@ package me.mykindos.betterpvp.core.world.site;
 
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.client.Client;
+import me.mykindos.betterpvp.core.client.events.ClientJoinEvent;
 import me.mykindos.betterpvp.core.client.events.ClientQuitEvent;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.server.Realm;
@@ -66,6 +67,13 @@ class ResidencyTest {
               admission: party
               anchorable: false
               rejoin: ANCHOR
+            camp:
+              world:
+                slime: "camps/"
+              lifecycle: OWNED
+              anchorable: true
+              rejoin: RESUME
+              rejoin-at: EXACT
             """;
 
     private static final UUID PLAYER = UUID.randomUUID();
@@ -74,6 +82,7 @@ class ResidencyTest {
     private final Map<String, World> worlds = new HashMap<>();
     private final Map<ResidencyStore.Kind, Residence> stored = new EnumMap<>(ResidencyStore.Kind.class);
 
+    private Placement placement;
     private ClientManager clientManager;
     private ResidencyStore store;
     private SiteInstances instances;
@@ -103,7 +112,9 @@ class ResidencyTest {
 
         final SiteRegistry registry = new SiteRegistry(mock(Core.class));
         registry.load(YamlConfiguration.loadConfiguration(new StringReader(CATALOGUE)));
-        residency = new Residency(mock(Core.class), clientManager, store, registry, instances, mock(Placement.class),
+        placement = mock(Placement.class);
+        when(placement.locate(any(), any())).thenReturn(new CompletableFuture<>());
+        residency = new Residency(mock(Core.class), clientManager, store, registry, instances, placement,
                 worldHandler);
 
         when(client.getId()).thenReturn(CLIENT_ID);
@@ -319,5 +330,32 @@ class ResidencyTest {
                 new Location(world("sites/woodcutting/1a2b3c4d"), 0.0, 0.0, 0.0)));
 
         assertEquals(from, residency.fallback(player));
+    }
+
+    @Test
+    @DisplayName("reconnecting after the server holding their camp died sends the player back to the camp")
+    void reconnectingAfterTheCampHostDied() {
+        final Location serverChoice = new Location(world("world"), 0.0, 0.0, 0.0);
+        stored.put(ResidencyStore.Kind.RESIDENCE, new Residence(SiteKey.of("camp", 42L), UUID.randomUUID(),
+                new ServerLocation("camp-gone", new Location(null, 1.0, 2.0, 3.0))));
+
+        assertEquals(serverChoice, login(serverChoice), "nothing is chosen before the camp is found again");
+        residency.onJoin(new ClientJoinEvent(client, player));
+
+        verify(placement).locate(eq(SiteKey.of("camp", 42L)), any());
+    }
+
+    @Test
+    @DisplayName("a camp left on this server whose instance is gone is not reopened, as on a single server")
+    void aCampLeftOnThisServerIsNotReopened() {
+        stored.put(ResidencyStore.Kind.RESIDENCE, new Residence(SiteKey.of("camp", 42L), UUID.randomUUID(),
+                new ServerLocation("current-server", new Location(world("camps/42"), 1.0, 2.0, 3.0))));
+        final Location spawn = new Location(world("world"), 0.5, 70.0, 0.5);
+        when(worldHandler.getSpawnLocation()).thenReturn(spawn);
+
+        assertEquals(spawn, login(new Location(world("world"), 0.0, 0.0, 0.0)));
+        residency.onJoin(new ClientJoinEvent(client, player));
+
+        verify(placement, never()).locate(any(), any());
     }
 }

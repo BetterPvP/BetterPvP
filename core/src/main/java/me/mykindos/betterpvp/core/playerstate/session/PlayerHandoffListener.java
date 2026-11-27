@@ -3,6 +3,7 @@ package me.mykindos.betterpvp.core.playerstate.session;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import lombok.CustomLog;
+import me.mykindos.betterpvp.core.framework.agones.ServerDrainEvent;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.locale.Translations;
@@ -68,6 +69,17 @@ public class PlayerHandoffListener implements Listener {
         // The process may end before an async save would, so a stopping server waits for it
         if (Bukkit.isStopping()) {
             leaving.join();
+        }
+    }
+
+    // Released before the drain moves anyone, because the next server waits for the release before it lets them in
+    @EventHandler
+    public void onDrain(ServerDrainEvent event) {
+        if (!handoff.isActive()) {
+            return;
+        }
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            handoff.leave(player);
         }
     }
 

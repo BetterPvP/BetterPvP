@@ -78,6 +78,28 @@ for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/component=proxy -o n
 done
 echo "ok: every proxy has a hub server to send players to"
 
+# The BetterPvP proxy plugin runs on every proxy and has joined the network.
+for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/component=proxy -o name); do
+  if ! kubectl -n "$NS" logs "$pod" -c proxy 2>/dev/null | grep -q "joined the network"; then
+    echo "FAIL: $pod has no BetterPvP proxy plugin on the network" >&2
+    exit 1
+  fi
+done
+echo "ok: every proxy runs the BetterPvP plugin on the network"
+
+# The question a proxy asks Placement when a player joins. Placement allocates a hub and names it.
+request='{"v":1,"topic":"placement.place","origin":"deploy-check","correlationId":"deploy-check","reply":false,"payload":{"site":"hub","owner":"0","owned":"false","asker":"deploy-check"}}'
+answer=$(kubectl -n "$NS" run "placement-check-$RANDOM" --rm -i --restart=Never --quiet --image=natsio/nats-box:0.18.1 --command -- nats req -s nats://nats:4222 --timeout 10s bpvp.bus.placement.place "$request" 2>&1 | grep '^{' || true)
+hub=$(jq -r '.payload.server // empty' <<<"$answer" 2>/dev/null | tr -d '')
+if [[ -z $hub ]]; then
+  echo "FAIL: Placement placed no hub: ${answer:-no answer}" >&2
+  exit 1
+fi
+for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/component=proxy -o name); do
+  kubectl -n "$NS" logs "$pod" -c proxy | grep -q "Added server '$hub'" || { echo "FAIL: $pod does not know $hub" >&2; exit 1; }
+done
+echo "ok: Placement sends joining players to $hub, which every proxy knows"
+
 # A server list ping through the load balancer, which only a proxy answers.
 py=$(command -v python3 || command -v python) || { echo "python is needed for the ping" >&2; exit 1; }
 for _ in $(seq 12); do

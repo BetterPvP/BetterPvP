@@ -16,7 +16,13 @@ public class WorldSource {
         /** A template folder copied per instance and deleted when the instance is reaped. */
         CLONE,
         /** A folder under which each owner's world is kept, made once and never deleted. */
-        OWN
+        OWN,
+        /**
+         * One world per owner built in memory from a slime template each time it opens and never saved. Without a
+         * slime loader installed, or without a slime file for the template, it is kept on disk exactly as
+         * {@link #OWN} is.
+         */
+        SLIME
     }
 
     @NotNull Kind kind;
@@ -25,8 +31,9 @@ public class WorldSource {
     @NotNull String value;
 
     /**
-     * What an owner's world is first made from, or null to generate one. Only {@link Kind#OWN} uses it, and only the
-     * first time that owner is given a world, so editing it afterwards changes nothing that already exists.
+     * What an owner's world is made from, or null to generate one. Only {@link Kind#OWN} and {@link Kind#SLIME} use
+     * it. An owned world on disk is made from it only the first time that owner is given a world, so editing it
+     * afterwards changes nothing that already exists.
      */
     @Nullable String template;
 
@@ -44,5 +51,14 @@ public class WorldSource {
 
     public static @NotNull WorldSource own(@NotNull String folder, @Nullable String template) {
         return new WorldSource(Kind.OWN, folder, template);
+    }
+
+    public static @NotNull WorldSource slime(@NotNull String folder, @Nullable String template) {
+        return new WorldSource(Kind.SLIME, folder, template);
+    }
+
+    /** Whether each owner has a world of their own. */
+    public boolean isOwned() {
+        return kind == Kind.OWN || kind == Kind.SLIME;
     }
 }

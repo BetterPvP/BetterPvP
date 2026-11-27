@@ -9,7 +9,7 @@ One command runs the whole network on your machine in a k3d cluster:
 | Shulker | v0.13.0 |
 | NATS | chart 2.15.3, 3 nodes with JetStream |
 | CloudNativePG | chart 0.29.2, one Postgres instance |
-| Velocity | 2 proxies, on `localhost:25565` |
+| Velocity | 2 proxies with the BetterPvP proxy plugin, on `localhost:25565` |
 | Paper | the server image, one fleet per role |
 | Services | Placement (`orchestration-service`), `clans-service`, `ledger-service` |
 
@@ -37,7 +37,8 @@ It creates the cluster `bpvp`, installs everything and starts the fleets. Run it
 | `BPVP_TAG` | `network-preview` | The tag of every image. Any tag CI pushed, such as a commit |
 | `BPVP_IMAGE` | `ghcr.io/betterpvp/server:$BPVP_TAG` | The server image, when it differs |
 | `SERVICES` | `orchestration-service clans-service ledger-service` | The services to run |
-| `SERVICE_TAG` | `$BPVP_TAG` | The service images' tag, when it differs |
+| `SERVICE_TAG` | `$BPVP_TAG` | The service and proxy images' tag, when it differs |
+| `BPVP_PROXY_IMAGE` | `ghcr.io/betterpvp/proxy:$SERVICE_TAG` | The proxy image, when it differs |
 | `BPVP_IMAGE_LOCAL` | | `1` to use images built on this machine instead of pulling them |
 | `GHCR_USER`, `GHCR_TOKEN` | | A GitHub login that can read the image. Save the token with the team's secrets |
 | `ASSETS_BUCKET`, `ASSETS_AWS_ACCESS_KEY_ID`, `ASSETS_AWS_SECRET_ACCESS_KEY`, `ASSETS_RESTIC_PASSWORD` | | Read-only build assets access. Unset, servers start without assets |
@@ -75,6 +76,10 @@ Servers stay healthy for Agones while Paper runs, so a slow start or a long tick
 
 The proxies turn every connection away, server list pings too, while no hub is Ready.
 
+## Proxies
+
+The `proxy` fleet runs `ghcr.io/betterpvp/proxy`: Velocity with the BetterPvP proxy plugin (`docker/proxy`). The plugin joins the network over NATS and asks Placement which hub each joining player lands on. Its config comes from `BPVP_ORCHESTRATION_URL`, `BPVP_NATS_URL`, `BPVP_NATS_TOKEN`, `BPVP_NATS_PREFIX` and `BPVP_HUB_SITE`, or a whole `config.toml` mounted at `/config/betterpvp-proxy.toml`.
+
 ## Services
 
 Each runs one Deployment in `bpvp`, from `manifests/services/<name>.yaml`. The `Service images` workflow pushes `ghcr.io/betterpvp/<name>` for each one on the branch.
@@ -102,10 +107,12 @@ kubectl -n bpvp exec -it postgres-1 -- psql betterpvp
 ## Check
 
 ```bash
-deploy/check.sh        # every fleet in ROLES reaches Ready, localhost:25565 answers and every proxy has a hub
+deploy/check.sh        # every fleet in ROLES is Ready, the services run, Placement places a hub every proxy knows, localhost:25565 answers
 deploy/down.sh
 deploy/check.sh down   # nothing is left
 ```
+
+The check asks Placement for a hub the way a joining proxy does, which allocates that hub. Joining with a Minecraft client is checked by hand.
 
 ## Down
 

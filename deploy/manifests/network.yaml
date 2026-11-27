@@ -24,7 +24,10 @@ spec:
       config: {}
       podOverrides:
         image:
-          name: itzg/mc-proxy:2026.11.2-java25
+          name: __PROXY_IMAGE__
+          pullPolicy: __PULL_POLICY__
+          imagePullSecrets:
+            - name: ghcr
         resources:
           requests:
             memory: 384Mi

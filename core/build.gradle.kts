@@ -31,6 +31,11 @@ dependencies {
     implementation(libs.reflections)
     implementation(libs.hikari.cp)
     implementation(libs.jedis)
+    implementation(project(":network-protocol"))
+    // BouncyCastle is only for NKey and JWT sign-in, which the network does not use
+    implementation(libs.jnats) {
+        exclude(group = "org.bouncycastle")
+    }
     api(libs.sidebar.api)
     runtimeOnly(libs.sidebar.impl)
 
@@ -55,6 +60,8 @@ dependencies {
 
     annotationProcessor(libs.lombok)
     testImplementation(libs.bundles.test)
+    testCompileOnly(libs.lombok)
+    testAnnotationProcessor(libs.lombok)
     // Mapper is compileOnly for the plugin (it is a server dependency), but the schematic tests build real regions.
     testImplementation(libs.mapper)
     // Mob and structure view tests mock ModelEngine models, the scene registry and PacketEvents packets.
@@ -62,6 +69,8 @@ dependencies {
     testImplementation(libs.packetevents)
     testImplementation("org.mockito:mockito-core:5.23.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
+    // A real NATS server for the transport tests, which skip when Docker is not running
+    testImplementation(libs.testcontainers)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

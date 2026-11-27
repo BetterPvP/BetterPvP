@@ -7,6 +7,9 @@ import me.mykindos.betterpvp.clans.protocol.ClanChange;
 import me.mykindos.betterpvp.clans.protocol.ClanMutation;
 import me.mykindos.betterpvp.clans.protocol.ClanReply;
 import me.mykindos.betterpvp.clans.protocol.ClanTopics;
+import me.mykindos.betterpvp.network.protocol.EnvelopeCodec;
+import me.mykindos.betterpvp.network.protocol.NetworkEnvelope;
+import me.mykindos.betterpvp.network.protocol.Subjects;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -15,7 +18,8 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Answers {@link ClanTopics#MUTATE} over NATS and announces each applied mutation on {@link ClanTopics#CHANGED}.
+ * Answers {@link ClanTopics#MUTATE} over NATS and announces each applied mutation on {@link ClanTopics#CHANGED}, on
+ * the same subjects and in the same envelope as the servers' message bus.
  * <p>
  * One NATS dispatcher thread handles every request, so mutations from every server are applied one after another in
  * the order NATS delivered them. Run a single replica: a second would apply in parallel and lose that order.
@@ -26,18 +30,22 @@ public class ClanService {
 
     private final Connection nats;
     private final ClanStore store;
+    private final String prefix;
+    private final EnvelopeCodec codec = new EnvelopeCodec();
     private final String origin = "clans-service-" + UUID.randomUUID();
     private Dispatcher dispatcher;
     private long sequence;
 
-    public ClanService(@NotNull Connection nats, @NotNull ClanStore store) {
+    /** @param prefix the subject prefix the servers use, which keeps networks sharing a NATS cluster apart */
+    public ClanService(@NotNull Connection nats, @NotNull ClanStore store, @NotNull String prefix) {
         this.nats = nats;
         this.store = store;
+        this.prefix = prefix;
     }
 
     public void start() {
         dispatcher = nats.createDispatcher(this::handle);
-        dispatcher.subscribe(ClanTopics.MUTATE);
+        dispatcher.subscribe(Subjects.bus(prefix, ClanTopics.MUTATE));
     }
 
     public void stop() {
@@ -47,23 +55,26 @@ public class ClanService {
     }
 
     private void handle(@NotNull Message message) {
-        final BusEnvelope request;
+        final NetworkEnvelope request;
         try {
-            request = BusEnvelope.decode(message.getData());
+            request = codec.decode(message.getData());
         } catch (IOException ex) {
             LOG.log(System.Logger.Level.WARNING, "Dropped an unreadable clan mutation", ex);
+            return;
+        }
+        if (request.isReply()) {
             return;
         }
 
         final ClanReply reply = apply(request);
         if (message.getReplyTo() != null) {
-            final BusEnvelope answer = new BusEnvelope(ClanTopics.MUTATE, origin, request.getCorrelationId(), true,
-                    reply.toPayload());
-            nats.publish(message.getReplyTo(), answer.encode());
+            final NetworkEnvelope answer = new NetworkEnvelope(ClanTopics.MUTATE, origin, request.getCorrelationId(),
+                    true, reply.toPayload());
+            nats.publish(message.getReplyTo(), codec.encode(answer));
         }
     }
 
-    private @NotNull ClanReply apply(@NotNull BusEnvelope request) {
+    private @NotNull ClanReply apply(@NotNull NetworkEnvelope request) {
         final ClanMutation mutation;
         try {
             mutation = ClanMutation.fromPayload(request.getPayload());
@@ -85,8 +96,9 @@ public class ClanService {
                 ? List.of(mutation.getClan(), mutation.getOther())
                 : List.of(mutation.getClan());
         final ClanChange change = new ClanChange(applied, mutation.getOp(), clans);
-        final BusEnvelope announcement = new BusEnvelope(ClanTopics.CHANGED, origin, null, false, change.toPayload());
-        nats.publish(ClanTopics.CHANGED, announcement.encode());
+        final NetworkEnvelope announcement = new NetworkEnvelope(ClanTopics.CHANGED, origin, null, false,
+                change.toPayload());
+        nats.publish(Subjects.bus(prefix, ClanTopics.CHANGED), codec.encode(announcement));
         return ClanReply.applied(applied);
     }
 }

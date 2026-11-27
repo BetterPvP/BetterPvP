@@ -11,16 +11,19 @@ import me.mykindos.betterpvp.clans.protocol.ClanMutation;
 import me.mykindos.betterpvp.clans.protocol.ClanOp;
 import me.mykindos.betterpvp.clans.protocol.ClanReply;
 import me.mykindos.betterpvp.clans.protocol.ClanTopics;
+import me.mykindos.betterpvp.network.protocol.EnvelopeCodec;
+import me.mykindos.betterpvp.network.protocol.NetworkEnvelope;
+import me.mykindos.betterpvp.network.protocol.Subjects;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -54,13 +57,15 @@ class ClanServiceTest {
     private static final Path MIGRATIONS = Path.of("../clans/src/main/resources/clans-migrations/postgres");
 
     @Container
-    private static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine");
+    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
 
     @Container
     private static final GenericContainer<?> NATS = new GenericContainer<>("nats:2.10-alpine")
             .withExposedPorts(4222)
             .waitingFor(Wait.forLogMessage(".*Server is ready.*", 1));
 
+    private static final String PREFIX = "test";
+    private static final EnvelopeCodec CODEC = new EnvelopeCodec();
     private static HikariDataSource dataSource;
 
     private Connection serviceConnection;
@@ -92,7 +97,7 @@ class ClanServiceTest {
             statement.execute("TRUNCATE clans CASCADE");
         }
         serviceConnection = connect();
-        service = new ClanService(serviceConnection, new ClanStore(dataSource));
+        service = new ClanService(serviceConnection, new ClanStore(dataSource), PREFIX);
         service.start();
         serviceConnection.flush(Duration.ofSeconds(2));
     }
@@ -119,7 +124,7 @@ class ClanServiceTest {
 
         final List<Long> announced = Collections.synchronizedList(new ArrayList<>());
         final Dispatcher dispatcher = watcher.createDispatcher(message -> announced.add(change(message).getSequence()));
-        dispatcher.subscribe(ClanTopics.CHANGED);
+        dispatcher.subscribe(Subjects.bus(PREFIX, ClanTopics.CHANGED));
         watcher.flush(Duration.ofSeconds(2));
 
         final int perServer = 15;
@@ -165,7 +170,7 @@ class ClanServiceTest {
                 seen.countDown();
             }
         });
-        dispatcher.subscribe(ClanTopics.CHANGED);
+        dispatcher.subscribe(Subjects.bus(PREFIX, ClanTopics.CHANGED));
         second.flush(Duration.ofSeconds(2));
 
         sentAt[0] = System.nanoTime();
@@ -245,14 +250,15 @@ class ClanServiceTest {
     }
 
     private static ClanReply send(Connection server, ClanMutation mutation) {
-        final BusEnvelope request = new BusEnvelope(ClanTopics.MUTATE, "test", UUID.randomUUID().toString(), false,
-                mutation.toPayload());
+        final NetworkEnvelope request = new NetworkEnvelope(ClanTopics.MUTATE, "test", UUID.randomUUID().toString(),
+                false, mutation.toPayload());
         try {
-            final Message reply = server.request(ClanTopics.MUTATE, request.encode(), Duration.ofSeconds(5));
+            final Message reply = server.request(Subjects.bus(PREFIX, ClanTopics.MUTATE), CODEC.encode(request),
+                    Duration.ofSeconds(5));
             if (reply == null) {
                 throw new IllegalStateException("The service did not answer " + mutation.getOp());
             }
-            return ClanReply.fromPayload(BusEnvelope.decode(reply.getData()).getPayload());
+            return ClanReply.fromPayload(CODEC.decode(reply.getData()).getPayload());
         } catch (IOException ex) {
             throw new IllegalStateException(ex);
         } catch (InterruptedException ex) {
@@ -263,7 +269,7 @@ class ClanServiceTest {
 
     private static ClanChange change(Message message) {
         try {
-            return ClanChange.fromPayload(BusEnvelope.decode(message.getData()).getPayload());
+            return ClanChange.fromPayload(CODEC.decode(message.getData()).getPayload());
         } catch (IOException ex) {
             throw new IllegalStateException(ex);
         }

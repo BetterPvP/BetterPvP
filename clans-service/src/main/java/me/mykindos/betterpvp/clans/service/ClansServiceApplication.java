@@ -5,6 +5,7 @@ import com.zaxxer.hikari.HikariDataSource;
 import io.nats.client.Connection;
 import io.nats.client.Nats;
 import io.nats.client.Options;
+import me.mykindos.betterpvp.network.protocol.Subjects;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
@@ -12,8 +13,10 @@ import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * Starts the Clans service from environment variables: {@code NATS_URL}, {@code DATABASE_URL} (a JDBC URL),
- * {@code DATABASE_USER} and {@code DATABASE_PASSWORD}. The clan tables are created by the clans plugin's migrations.
+ * Starts the Clans service from environment variables: {@code NATS_URL}, {@code NATS_TOKEN} (optional),
+ * {@code NATS_PREFIX} (the servers' {@code core.nats.prefix}, {@code bpvp} by default), {@code DATABASE_URL} (a JDBC
+ * URL), {@code DATABASE_USER} and {@code DATABASE_PASSWORD}. The clan tables are created by the clans plugin's
+ * migrations.
  */
 public final class ClansServiceApplication {
 
@@ -30,15 +33,19 @@ public final class ClansServiceApplication {
         hikari.setMaximumPoolSize(2);
         final HikariDataSource dataSource = new HikariDataSource(hikari);
 
-        final Options options = new Options.Builder()
+        final Options.Builder options = new Options.Builder()
                 .server(System.getenv().getOrDefault("NATS_URL", Options.DEFAULT_URL))
                 .connectionName("clans-service")
                 .maxReconnects(-1)
-                .reconnectWait(Duration.ofSeconds(1))
-                .build();
-        final Connection nats = Nats.connect(options);
+                .reconnectWait(Duration.ofSeconds(1));
+        final String token = System.getenv("NATS_TOKEN");
+        if (token != null && !token.isBlank()) {
+            options.token(token.toCharArray());
+        }
+        final Connection nats = Nats.connect(options.build());
 
-        final ClanService service = new ClanService(nats, new ClanStore(dataSource));
+        final String prefix = System.getenv().getOrDefault("NATS_PREFIX", Subjects.DEFAULT_PREFIX);
+        final ClanService service = new ClanService(nats, new ClanStore(dataSource), prefix);
         service.start();
         LOG.log(System.Logger.Level.INFO, "Clans service answering on " + nats.getConnectedUrl());
 

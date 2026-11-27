@@ -8,10 +8,10 @@ description = "Standalone service that is the only writer of clans, members, ran
 
 dependencies {
     implementation(project(":clans-protocol"))
+    implementation(project(":network-protocol"))
     implementation(libs.jnats)
     implementation(libs.postgres)
     implementation(libs.hikari.cp)
-    implementation(libs.jackson.databind)
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)
     compileOnly(libs.annotations)

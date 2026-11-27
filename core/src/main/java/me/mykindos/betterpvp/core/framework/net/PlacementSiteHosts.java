@@ -5,7 +5,6 @@ import me.mykindos.betterpvp.network.protocol.PlacementMessages;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -36,7 +35,7 @@ public class PlacementSiteHosts implements SiteHosts {
                 PlacementMessages.ASKER, asker));
 
         // Allocating a new server is a round trip to Kubernetes, so this waits longer than a chat lookup would.
-        return bus.request(ask, Duration.ofSeconds(5)).thenApply(replies -> answer(siteId, ownerId, replies));
+        return bus.ask(ask, Duration.ofSeconds(5)).thenApply(reply -> answer(siteId, ownerId, reply));
     }
 
     @Override
@@ -46,21 +45,21 @@ public class PlacementSiteHosts implements SiteHosts {
                 PlacementMessages.OWNER, String.valueOf(ownerId),
                 PlacementMessages.SERVER, server));
 
-        return bus.request(ask, Duration.ofSeconds(5)).thenAccept(replies -> {
-            if (replies.isEmpty()) {
+        return bus.ask(ask, Duration.ofSeconds(5)).thenAccept(reply -> {
+            if (reply.isEmpty()) {
                 // The lease still lapses a minute after this server stops advertising the site.
                 log.warn("Placement did not confirm releasing site {} of owner {}", siteId, ownerId).submit();
             }
         });
     }
 
-    private @NotNull Optional<String> answer(@NotNull String siteId, long ownerId, @NotNull List<BusMessage> replies) {
-        if (replies.isEmpty()) {
+    private @NotNull Optional<String> answer(@NotNull String siteId, long ownerId, @NotNull Optional<BusMessage> answered) {
+        if (answered.isEmpty()) {
             log.warn("Placement did not answer for site {} of owner {}", siteId, ownerId).submit();
             return Optional.empty();
         }
 
-        final BusMessage reply = replies.get(0);
+        final BusMessage reply = answered.get();
         final Optional<String> server = reply.get(PlacementMessages.SERVER);
         if (server.isEmpty()) {
             log.warn("Placement could not place site {} of owner {}: {}", siteId, ownerId,

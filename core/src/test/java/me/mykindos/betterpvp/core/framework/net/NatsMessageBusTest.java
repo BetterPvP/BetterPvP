@@ -137,4 +137,24 @@ class NatsMessageBusTest extends MessageBusContract {
         assertEquals(1, answered.join().size());
         assertEquals("sessions", answered.join().get(0).getOrigin());
     }
+
+    @Test
+    @DisplayName("asking one service ends at its reply, without waiting out the timeout")
+    void askEndsAtTheFirstReply() {
+        final var answered = bus.ask(BusMessage.of("placement.place", "site", "camp"), Duration.ofSeconds(5));
+        final String replyTo = published.get(0).getReplyTo();
+
+        bus.deliver(replyTo, null, new NetworkEnvelope("placement.place", "placement", null, true, Map.of("server", "Camp-1")));
+
+        assertEquals(Optional.of("Camp-1"), answered.join().flatMap(reply -> reply.get("server")));
+    }
+
+    @Test
+    @DisplayName("asking with no reply is empty once the timeout passes")
+    void askWithoutReplyIsEmpty() {
+        final var answered = bus.ask(BusMessage.of("placement.place", "site", "camp"), Duration.ofSeconds(5));
+        elapse();
+
+        assertTrue(answered.join().isEmpty());
+    }
 }

@@ -71,7 +71,7 @@ while read -r file path value; do
   [[ -n $file ]] && set_yaml "$file" "$path" "$value"
 done <<<"${BPVP_CONFIG_SET:-}"
 
-# Build assets: structures into plugins/Core/schematics, each world into worlds/<name>. The image pins a release;
+# Build assets: structures into plugins/Core/schematics, each world into worlds/<name>. The image pins a release.
 # ASSETS_RELEASE=latest pulls the newest instead.
 if [[ -n ${ASSETS_BUCKET:-} ]]; then
   : "${ASSETS_AWS_ACCESS_KEY_ID:?}" "${ASSETS_AWS_SECRET_ACCESS_KEY:?}" "${ASSETS_RESTIC_PASSWORD:?}"

@@ -34,6 +34,7 @@ public class ClanService {
     private final EnvelopeCodec codec = new EnvelopeCodec();
     private final String origin = "clans-service-" + UUID.randomUUID();
     private Dispatcher dispatcher;
+    /** Orders the changes of one run. It starts again from one when the service restarts. */
     private long sequence;
 
     /** @param prefix the subject prefix the servers use, which keeps networks sharing a NATS cluster apart */

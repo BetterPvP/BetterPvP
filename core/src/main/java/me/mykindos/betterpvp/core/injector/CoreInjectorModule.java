@@ -19,6 +19,7 @@ import me.mykindos.betterpvp.core.framework.blockbreak.packet.BlockBreakProgress
 import me.mykindos.betterpvp.core.framework.blockbreak.packet.BlockBreakProgressServiceImpl;
 import me.mykindos.betterpvp.core.framework.blockbreak.resolver.BlockBreakResolver;
 import me.mykindos.betterpvp.core.framework.blockbreak.resolver.DefaultBlockBreakResolver;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerModule;
 import me.mykindos.betterpvp.core.framework.net.NetModule;
 import me.mykindos.betterpvp.core.framework.role.RoleGate;
 import me.mykindos.betterpvp.core.framework.server.CrossServerMessageService;
@@ -47,6 +48,7 @@ public class CoreInjectorModule extends AbstractModule {
         bind(RoleGate.class).toInstance(RoleGate.current());
 
         install(new NetModule());
+        install(new LedgerModule());
         install(new SiteModule());
         install(new PlayerStateModule());
 

@@ -2,15 +2,13 @@ package me.mykindos.betterpvp.clans.world.camp.settler;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import me.mykindos.betterpvp.clans.clans.ClanManager;
+import me.mykindos.betterpvp.clans.clans.alert.ClanAlerts;
 import me.mykindos.betterpvp.clans.world.camp.Camps;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.locale.Translations;
-import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.world.settler.SettlerService;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -26,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import me.mykindos.betterpvp.core.utilities.model.ChatIcon;
 
 /**
- * A camp with a Lookout warns its online members when someone from outside the clan lands there. The same visitor is
- * reported once every few minutes, not every time they come and go.
+ * A camp with a Lookout warns its online members, on any server, when someone from outside the clan lands there. The
+ * same visitor is reported once every few minutes, not every time they come and go.
  */
 @BPvPListener
 @Singleton
@@ -36,16 +34,16 @@ public class LookoutWatch implements Listener {
     private static final long QUIET_MILLIS = 5 * 60 * 1000L;
 
     private final Camps camps;
-    private final ClanManager clanManager;
+    private final ClanAlerts alerts;
     private final SettlerService settlers;
     private final CampWideTraits campWide;
     private final Map<String, Long> reported = new ConcurrentHashMap<>();
 
     @Inject
-    public LookoutWatch(@NotNull Camps camps, @NotNull ClanManager clanManager, @NotNull SettlerService settlers,
+    public LookoutWatch(@NotNull Camps camps, @NotNull ClanAlerts alerts, @NotNull SettlerService settlers,
                         @NotNull CampWideTraits campWide) {
         this.camps = camps;
-        this.clanManager = clanManager;
+        this.alerts = alerts;
         this.settlers = settlers;
         this.campWide = campWide;
     }
@@ -67,12 +65,7 @@ public class LookoutWatch implements Listener {
 
         final Component message = ChatIcon.PROBLEM.line(Translations.component("clans.camp.lookout.landed",
                 Component.text(visitor.getName(), NamedTextColor.YELLOW)).color(NamedTextColor.RED));
-        clanManager.getClanById(clanId.getAsLong()).ifPresent(clan -> clan.getMembers().forEach(member -> {
-            final Player online = Bukkit.getPlayer(member.getUuid());
-            if (online != null) {
-                UtilMessage.plain(online, message);
-            }
-        }));
+        alerts.alert(clanId.getAsLong(), message, null);
     }
 
     private boolean firstInAWhile(long clanId, @NotNull UUID visitor) {

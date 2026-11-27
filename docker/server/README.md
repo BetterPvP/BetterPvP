@@ -31,6 +31,8 @@ The entrypoint prepares `/data` and starts Paper:
 4. Pulls the build assets when `ASSETS_BUCKET` is set.
 5. Starts Paper with `--world-container worlds`.
 
+Under Agones (`AGONES_SDK_HTTP_PORT` is set) the entrypoint also reports health every 5 seconds while Paper runs.
+
 | Variable | Default | What it is |
 |---|---|---|
 | `BPVP_ROLE` | `all` | `all`, `hub`, `resource`, `camp`, `dungeon` or `event` |

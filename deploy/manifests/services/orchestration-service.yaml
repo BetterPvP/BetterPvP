@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: orchestration-service
+  namespace: bpvp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: orchestration-service
+  namespace: bpvp
+rules:
+  - apiGroups: ["agones.dev"]
+    resources: ["gameservers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["allocation.agones.dev"]
+    resources: ["gameserverallocations"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: orchestration-service
+  namespace: bpvp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: orchestration-service
+subjects:
+  - kind: ServiceAccount
+    name: orchestration-service
+    namespace: bpvp
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orchestration-service
+  namespace: bpvp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestration-service
+  template:
+    metadata:
+      labels:
+        app: orchestration-service
+    spec:
+      serviceAccountName: orchestration-service
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: orchestration-service
+          image: __IMAGE__
+          imagePullPolicy: __PULL_POLICY__
+          env:
+            - name: JAVA_OPTS
+              value: -XX:MaxRAMPercentage=75 -Dorchestration.config=/config/config.toml
+          ports:
+            - name: http
+              containerPort: 8085
+          volumeMounts:
+            - name: config
+              mountPath: /config
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 384Mi
+      volumes:
+        - name: config
+          configMap:
+            name: orchestration-service
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestration-service
+  namespace: bpvp
+spec:
+  selector:
+    app: orchestration-service
+  ports:
+    - name: http
+      port: 8085
+      targetPort: http

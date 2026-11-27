@@ -27,6 +27,7 @@ dependencies {
 
     paperweight.paperDevBundle(libs.versions.paper)
     implementation(project(":orchestration"))
+    api(project(":ledger"))
     api(project(":structure-format"))
     implementation(libs.reflections)
     implementation(libs.hikari.cp)

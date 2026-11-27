@@ -73,7 +73,7 @@ public class PlayerHandoffListener implements Listener {
     }
 
     // Released before the drain moves anyone, because the next server waits for the release before it lets them in
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onDrain(ServerDrainEvent event) {
         if (!handoff.isActive()) {
             return;

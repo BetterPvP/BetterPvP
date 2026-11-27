@@ -12,7 +12,8 @@ import me.mykindos.betterpvp.clans.clans.fatigue.factor.RepeatKillerFactor;
 import me.mykindos.betterpvp.clans.clans.fatigue.punishment.FatiguePunishment;
 import me.mykindos.betterpvp.clans.clans.fatigue.punishment.SlownessPunishment;
 import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
-import me.mykindos.betterpvp.clans.clans.writer.ClanWriterProvider;
+import me.mykindos.betterpvp.clans.clans.writer.LocalClanWriter;
+import me.mykindos.betterpvp.clans.clans.writer.ServiceClanWriter;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampProfessions;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampSettlers;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampTraits;
@@ -24,6 +25,8 @@ import me.mykindos.betterpvp.clans.world.camp.upgrade.CasualtyStore;
 import me.mykindos.betterpvp.clans.world.camp.upgrade.DatabaseCasualtyStore;
 import me.mykindos.betterpvp.clans.world.camp.upgrade.FeastTable;
 import me.mykindos.betterpvp.clans.world.camp.upgrade.GreatBell;
+import me.mykindos.betterpvp.core.framework.role.RoleGate;
+import me.mykindos.betterpvp.core.framework.role.ServerRole;
 
 public class ClansInjectorModule extends AbstractModule {
 
@@ -60,8 +63,13 @@ public class ClansInjectorModule extends AbstractModule {
         Multibinder.newSetBinder(binder(), MoraleBoost.class).addBinding().to(GreatBell.class);
         bind(ProsperityStore.class).to(DatabaseProsperityStore.class);
         bind(CasualtyStore.class).to(DatabaseCasualtyStore.class);
-        // Eager, so a server writing through the Clans service is listening for changes from the start.
-        bind(ClanWriter.class).toProvider(ClanWriterProvider.class).asEagerSingleton();
+        // A server with role all is a network of one and writes clans itself. Every other role writes through the
+        // Clans service, eagerly so it is listening for changes from the start.
+        if (RoleGate.current().getRole() == ServerRole.ALL) {
+            bind(ClanWriter.class).to(LocalClanWriter.class);
+        } else {
+            bind(ClanWriter.class).to(ServiceClanWriter.class).asEagerSingleton();
+        }
 
     }
 

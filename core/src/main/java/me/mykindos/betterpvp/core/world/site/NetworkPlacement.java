@@ -9,6 +9,7 @@ import me.mykindos.betterpvp.core.framework.net.Arrival;
 import me.mykindos.betterpvp.core.framework.net.PlayerTransfer;
 import me.mykindos.betterpvp.core.framework.net.RemoteInstance;
 import me.mykindos.betterpvp.core.framework.net.SiteDirectory;
+import me.mykindos.betterpvp.core.framework.net.SiteHosts;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
 import org.bukkit.entity.Player;
@@ -27,7 +28,8 @@ import java.util.concurrent.CompletableFuture;
  * it. Nothing above this changes between one server and twenty.
  * <p>
  * Locating resolves in a fixed order: an instance this server already holds, then one another server holds with room,
- * then a new one on whichever server is emptiest. A site pinned to a server by its policy skips all of that.
+ * then a new one on the server {@link SiteHosts} chooses. An owned site goes wherever {@link SiteHosts} says holds it.
+ * A site pinned to a server by its policy skips all of that. When no host can be decided, the party stays put.
  */
 @BPvPListener
 @Singleton
@@ -38,17 +40,19 @@ public class NetworkPlacement implements Placement, Listener {
     private final SiteRegistry registry;
     private final SiteInstances instances;
     private final SiteDirectory directory;
+    private final SiteHosts hosts;
     private final PlayerTransfer transfers;
     private final LocalPlacement local;
 
     @Inject
     public NetworkPlacement(@NotNull Core core, @NotNull SiteRegistry registry, @NotNull SiteInstances instances,
-                            @NotNull SiteDirectory directory, @NotNull PlayerTransfer transfers,
-                            @NotNull LocalPlacement local) {
+                            @NotNull SiteDirectory directory, @NotNull SiteHosts hosts,
+                            @NotNull PlayerTransfer transfers, @NotNull LocalPlacement local) {
         this.core = core;
         this.registry = registry;
         this.instances = instances;
         this.directory = directory;
+        this.hosts = hosts;
         this.transfers = transfers;
         this.local = local;
     }
@@ -77,9 +81,9 @@ public class NetworkPlacement implements Placement, Listener {
         }
 
         if (key.isOwned()) {
-            // An owned world lives on one machine's disk, so the first server to claim it keeps it.
-            return directory.stickyHost(key.getSiteId(), key.getOwnerId(), currentServer())
-                    .thenCompose(host -> onHost(site, key, party, host));
+            // An owned site opens on one server at a time, so whichever server holds it is the only answer.
+            return hosts.hostFor(key.getSiteId(), key.getOwnerId(), true, currentServer())
+                    .thenCompose(host -> onDecidedHost(site, key, party, host));
         }
 
         return directory.lookup(key.getSiteId(), key.getOwnerId())
@@ -175,13 +179,20 @@ public class NetworkPlacement implements Placement, Listener {
                         : Optional.empty());
     }
 
-    /** Makes a new instance, here if this server is the emptiest and on that server otherwise. */
+    /** Makes a new instance on whichever server is chosen for it, this one included. */
     private @NotNull CompletableFuture<SiteHandle> provisionSomewhere(@NotNull Site site, @NotNull SiteKey key,
                                                                       @NotNull Party party) {
-        return directory.serversByLoad().thenCompose(servers -> {
-            final String emptiest = servers.isEmpty() ? currentServer() : servers.get(0);
-            return onHost(site, key, party, emptiest);
-        });
+        return hosts.hostFor(key.getSiteId(), key.getOwnerId(), false, currentServer())
+                .thenCompose(host -> onDecidedHost(site, key, party, host));
+    }
+
+    private @NotNull CompletableFuture<SiteHandle> onDecidedHost(@NotNull Site site, @NotNull SiteKey key,
+                                                                 @NotNull Party party, @NotNull Optional<String> host) {
+        if (host.isEmpty()) {
+            return CompletableFuture.failedFuture(new IllegalStateException(
+                    "No server could be chosen to host " + key + " right now"));
+        }
+        return onHost(site, key, party, host.get());
     }
 
     /**

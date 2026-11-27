@@ -29,7 +29,7 @@ public final class ItemLoader {
                 continue;
             }
 
-            if (!adapters.canLoad(itemClazz)) {
+            if (!adapters.hasDependencies(itemClazz)) {
                 log.warn("Could not load item " + itemClazz.getSimpleName() + "! Dependencies not found!").submit();
                 continue;
             }

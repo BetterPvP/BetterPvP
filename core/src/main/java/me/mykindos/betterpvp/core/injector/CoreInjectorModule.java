@@ -1,6 +1,8 @@
 package me.mykindos.betterpvp.core.injector;
 
 import com.google.inject.AbstractModule;
+import com.google.inject.Provides;
+import com.google.inject.Singleton;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.chat.filter.IFilterService;
@@ -9,6 +11,8 @@ import me.mykindos.betterpvp.core.chat.ignore.IIgnoreService;
 import me.mykindos.betterpvp.core.chat.ignore.impl.DefaultIgnoreService;
 import me.mykindos.betterpvp.core.database.connection.IDatabaseConnection;
 import me.mykindos.betterpvp.core.database.connection.PostgresDatabaseConnection;
+import me.mykindos.betterpvp.core.framework.agones.AgonesSdk;
+import me.mykindos.betterpvp.core.framework.agones.GameServerSdk;
 import me.mykindos.betterpvp.core.framework.blockbreak.global.GlobalBlockBreakRules;
 import me.mykindos.betterpvp.core.framework.blockbreak.global.GlobalBlockBreakRulesImpl;
 import me.mykindos.betterpvp.core.framework.blockbreak.packet.BlockBreakProgressService;
@@ -16,11 +20,13 @@ import me.mykindos.betterpvp.core.framework.blockbreak.packet.BlockBreakProgress
 import me.mykindos.betterpvp.core.framework.blockbreak.resolver.BlockBreakResolver;
 import me.mykindos.betterpvp.core.framework.blockbreak.resolver.DefaultBlockBreakResolver;
 import me.mykindos.betterpvp.core.framework.net.NetModule;
+import me.mykindos.betterpvp.core.framework.role.RoleGate;
 import me.mykindos.betterpvp.core.framework.server.CrossServerMessageService;
 import me.mykindos.betterpvp.core.framework.server.VelocityCrossServerMessageService;
 import me.mykindos.betterpvp.core.framework.server.network.NetworkPlayerCountService;
 import me.mykindos.betterpvp.core.framework.server.network.PluginMessagingNetworkPlayerCountService;
 import me.mykindos.betterpvp.core.framework.server.orchestration.CoreOrchestrationGatewayProvider;
+import me.mykindos.betterpvp.core.playerstate.PlayerStateModule;
 import me.mykindos.betterpvp.core.world.site.SiteModule;
 import me.mykindos.betterpvp.orchestration.api.OrchestrationGateway;
 
@@ -36,9 +42,11 @@ public class CoreInjectorModule extends AbstractModule {
     @Override
     protected void configure() {
         bind(Core.class).toInstance(plugin);
+        bind(RoleGate.class).toInstance(RoleGate.current());
 
         install(new NetModule());
         install(new SiteModule());
+        install(new PlayerStateModule());
 
         bind(IDatabaseConnection.class).to(PostgresDatabaseConnection.class);
         bind(IFilterService.class).to(DatabaseFilterService.class);
@@ -50,5 +58,11 @@ public class CoreInjectorModule extends AbstractModule {
         bind(BlockBreakResolver.class).to(DefaultBlockBreakResolver.class);
         bind(BlockBreakProgressService.class).to(BlockBreakProgressServiceImpl.class);
         log.info("Using default integrations").submit();
+    }
+
+    @Provides
+    @Singleton
+    GameServerSdk gameServerSdk() {
+        return AgonesSdk.fromEnvironment(System.getenv());
     }
 }

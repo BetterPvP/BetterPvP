@@ -2,7 +2,7 @@ name: Server image
 
 on:
   push:
-    branches: [ "camps/main" ]
+    branches: [ "camps/main", "network/preview" ]
   pull_request:
   workflow_dispatch:
 

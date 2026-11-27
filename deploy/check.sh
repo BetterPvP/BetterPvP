@@ -48,8 +48,19 @@ for gs in $(kubectl -n "$NS" get gameservers -l betterpvp.net/role -o name); do
 done
 echo "ok: every server declares the players and camp-slots counters"
 
+# Shulker's agent reports a server Ready even when Core failed, so each server's log must show Core running.
+for gs in $(kubectl -n "$NS" get gameservers -l betterpvp.net/role -o name); do
+  log=$(kubectl -n "$NS" logs "${gs#*/}" -c minecraft-server 2>/dev/null || true)
+  if grep -E "Error occurred while enabling (Core|Clans|Champions|Shops|Progression|Dungeons|Events|Store) " <<<"$log"; then
+    echo "FAIL: a BetterPvP plugin did not start on ${gs#*/}" >&2
+    exit 1
+  fi
+  grep -q "Reporting lifecycle to the Agones sidecar" <<<"$log" || { echo "FAIL: Core is not running on ${gs#*/}" >&2; exit 1; }
+done
+echo "ok: Core and every BetterPvP plugin started on every server"
+
 # The services run, and Placement may read GameServers and allocate them.
-for service in ${SERVICES:-orchestration-service clans-service ledger-service}; do
+for service in ${SERVICES:-orchestration-service clans-service ledger-service sessions-service}; do
   if ! kubectl -n "$NS" rollout status "deployment/$service" --timeout=300s >/dev/null; then
     kubectl -n "$NS" logs "deployment/$service" --tail 30 >&2 || true
     echo "FAIL: $service is not running" >&2
@@ -90,7 +101,7 @@ echo "ok: every proxy runs the BetterPvP plugin on the network"
 # The question a proxy asks Placement when a player joins. Placement allocates a hub and names it.
 request='{"v":1,"topic":"placement.place","origin":"deploy-check","correlationId":"deploy-check","reply":false,"payload":{"site":"hub","owner":"0","owned":"false","asker":"deploy-check"}}'
 answer=$(kubectl -n "$NS" run "placement-check-$RANDOM" --rm -i --restart=Never --quiet --image=natsio/nats-box:0.18.1 --command -- nats req -s nats://nats:4222 --timeout 10s bpvp.bus.placement.place "$request" 2>&1 | grep '^{' || true)
-hub=$(jq -r '.payload.server // empty' <<<"$answer" 2>/dev/null | tr -d '')
+hub=$(jq -r '.payload.server // empty' <<<"$answer" 2>/dev/null | tr -d '\r')
 if [[ -z $hub ]]; then
   echo "FAIL: Placement placed no hub: ${answer:-no answer}" >&2
   exit 1

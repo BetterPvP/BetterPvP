@@ -6,9 +6,17 @@ cd "$(dirname "$0")"
 
 CLUSTER=${CLUSTER:-bpvp}
 NS=bpvp
-TAG=${BPVP_TAG:-network-preview}
-IMAGE=${BPVP_IMAGE:-ghcr.io/betterpvp/server:$TAG}
-SERVICES=${SERVICES:-orchestration-service clans-service ledger-service}
+# BPVP_BUILD_LOCAL=1 builds every image from this checkout (deploy/build-local.sh) instead of pulling them.
+if [[ ${BPVP_BUILD_LOCAL:-} == 1 ]]; then
+  REGISTRY=bpvp.local
+  TAG=${BPVP_TAG:-local}
+  BPVP_IMAGE_LOCAL=1
+else
+  REGISTRY=ghcr.io/betterpvp
+  TAG=${BPVP_TAG:-network-preview}
+fi
+IMAGE=${BPVP_IMAGE:-$REGISTRY/server:$TAG}
+SERVICES=${SERVICES:-orchestration-service clans-service ledger-service sessions-service}
 SERVER_MEMORY=${SERVER_MEMORY:-3Gi}
 ROLES=${ROLES:-hub resource camp dungeon event}
 K3S_IMAGE=rancher/k3s:v1.34.13-k3s1
@@ -33,10 +41,13 @@ kubectl config use-context "k3d-$CLUSTER" >/dev/null
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl create namespace shulker-system --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-service_image() { echo "ghcr.io/betterpvp/$1:${SERVICE_TAG:-$TAG}"; }
+service_image() { echo "$REGISTRY/$1:${SERVICE_TAG:-$TAG}"; }
 PROXY_IMAGE=${BPVP_PROXY_IMAGE:-$(service_image proxy)}
 
 step "Images"
+if [[ ${BPVP_BUILD_LOCAL:-} == 1 && ${BPVP_SKIP_BUILD:-} != 1 ]]; then
+  SERVICES=$SERVICES ./build-local.sh "$TAG"
+fi
 if [[ ${BPVP_IMAGE_LOCAL:-} == 1 ]]; then
   images=("$IMAGE" "$PROXY_IMAGE")
   for service in $SERVICES; do images+=("$(service_image "$service")"); done
@@ -120,10 +131,13 @@ for role in $ROLES; do
       | .template.spec.template.spec.terminationGracePeriodSeconds = 45)
   }' | kubectl apply -f -
   if jq -e '.buffer' <<<"$f" >/dev/null; then
-    jq -n --arg role "$role" --arg ns "$NS" --argjson f "$f" '{
+    # BUFFER_MAX caps every role's servers, for a machine that cannot hold the spares.
+    jq -n --arg role "$role" --arg ns "$NS" --argjson f "$f" --argjson max "${BUFFER_MAX:-0}" '{
       apiVersion: "autoscaling.agones.dev/v1", kind: "FleetAutoscaler",
       metadata: {name: $role, namespace: $ns},
-      spec: {fleetName: $role, policy: {type: "Buffer", buffer: $f.buffer}}
+      spec: {fleetName: $role, policy: {type: "Buffer", buffer: (if $max > 0
+        then $f.buffer | .maxReplicas = ([.maxReplicas, $max] | min) | .minReplicas = ([.minReplicas, $max] | min)
+        else $f.buffer end)}}
     }' | kubectl apply -f -
   fi
 done

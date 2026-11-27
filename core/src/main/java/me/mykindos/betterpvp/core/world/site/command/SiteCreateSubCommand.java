@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.command.IConsoleCommand;
 import me.mykindos.betterpvp.core.command.SubCommand;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.world.site.Party;
@@ -11,6 +12,7 @@ import me.mykindos.betterpvp.core.world.site.Site;
 import me.mykindos.betterpvp.core.world.site.SiteInstances;
 import me.mykindos.betterpvp.core.world.site.SiteKey;
 import me.mykindos.betterpvp.core.world.site.SiteRegistry;
+import net.kyori.adventure.audience.Audience;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.command.CommandSender;
@@ -19,13 +21,14 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
- * {@code /site create <site> [owner]}: opens an instance without travelling to it.
+ * {@code /site create <site> [owner]}: opens an instance without travelling to it. Runs from the console too.
  */
 @Singleton
 @SubCommand(SiteCommand.class)
-public class SiteCreateSubCommand extends Command {
+public class SiteCreateSubCommand extends Command implements IConsoleCommand {
 
     private final SiteRegistry registry;
     private final SiteInstances instances;
@@ -48,28 +51,38 @@ public class SiteCreateSubCommand extends Command {
 
     @Override
     public void execute(Player player, Client client, String... args) {
+        open(player, player.getUniqueId(), args);
+    }
+
+    @Override
+    public void execute(CommandSender sender, String[] args) {
+        // The console has no player id, so a placeholder holds its place in the party while the instance opens.
+        open(sender, new UUID(0L, 0L), args);
+    }
+
+    private void open(@NotNull Audience sender, @NotNull UUID asker, @NotNull String... args) {
         if (args.length < 1) {
-            UtilMessage.simpleMessage(player, "Sites", Component.text("Usage: /site create <site> [owner]", NamedTextColor.RED));
+            UtilMessage.simpleMessage(sender, "Sites", Component.text("Usage: /site create <site> [owner]", NamedTextColor.RED));
             return;
         }
 
         final Site site = registry.get(args[0]).orElse(null);
         if (site == null) {
-            UtilMessage.simpleMessage(player, "Sites", Component.text("No site named ", NamedTextColor.RED)
+            UtilMessage.simpleMessage(sender, "Sites", Component.text("No site named ", NamedTextColor.RED)
                     .append(Component.text(args[0], NamedTextColor.YELLOW)));
             return;
         }
 
         final SiteKey key = args.length > 1 ? site.keyFor(Long.parseLong(args[1])) : site.key();
-        instances.locate(key, Party.solo(player.getUniqueId())).whenComplete((instance, ex) -> {
+        instances.locate(key, Party.solo(asker)).whenComplete((instance, ex) -> {
             if (ex != null) {
-                UtilMessage.simpleMessage(player, "Sites", Component.text("Could not open one: " + ex.getMessage(), NamedTextColor.RED));
+                UtilMessage.simpleMessage(sender, "Sites", Component.text("Could not open one: " + ex.getMessage(), NamedTextColor.RED));
                 return;
             }
 
             // Nobody is going there yet, so the reservation locating it made has to be handed back.
-            instances.abandon(instance, Party.solo(player.getUniqueId()));
-            UtilMessage.simpleMessage(player, "Sites", Component.text("Opened ", NamedTextColor.GREEN)
+            instances.abandon(instance, Party.solo(asker));
+            UtilMessage.simpleMessage(sender, "Sites", Component.text("Opened ", NamedTextColor.GREEN)
                     .append(Component.text(instance.getShortId(), NamedTextColor.YELLOW))
                     .append(Component.text(" at " + instance.getWorldName(), NamedTextColor.GRAY)));
         });

@@ -17,5 +17,6 @@ public class SiteModule extends AbstractModule {
         bind(ResidencyStore.class).to(DatabaseResidencyStore.class);
         bind(SiteStorage.class).to(DatabaseSiteStorage.class);
         bind(PlayerWhereabouts.class).to(LocalPlayerWhereabouts.class);
+        bind(SlimeWorldLoader.class).to(PolarWorldLoader.class);
     }
 }

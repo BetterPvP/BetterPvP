@@ -145,9 +145,6 @@ dependencyResolutionManagement {
             // Library - Guice
             library("guice", "com.google.inject", "guice").version("7.0.0")
 
-            // Library - Redis
-            library("jedis", "redis.clients", "jedis").version("5.2.0")
-
             // Library - NATS
             library("jnats", "io.nats", "jnats").version("2.27.0")
             library("testcontainers", "org.testcontainers", "testcontainers").version("2.0.5")

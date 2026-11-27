@@ -181,4 +181,10 @@ class NetworkLayerTest {
         assertTrue(layer.bus() instanceof VelocityMessageBus);
         assertTrue(layer.directory() instanceof LocalSiteDirectory);
     }
+
+    @Test
+    @DisplayName("without NATS there is no Placement service, so hosts come from the directory as before")
+    void hostsFallBackToTheDirectory() {
+        assertTrue(layer.hosts() instanceof DirectorySiteHosts);
+    }
 }

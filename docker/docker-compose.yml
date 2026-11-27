@@ -32,5 +32,18 @@ services:
       timeout: 5s
       retries: 5
 
+  # Runs the jar ./gradlew shadowJar leaves in build/
+  sessions:
+    image: eclipse-temurin:25-jre
+    container_name: sessions
+    command: ["java", "-jar", "/app/sessions-service.jar"]
+    environment:
+      SESSIONS_NATS_URL: nats://nats:4222
+    volumes:
+      - ../build/sessions-service.jar:/app/sessions-service.jar:ro
+    depends_on:
+      nats:
+        condition: service_healthy
+
 volumes:
   nats-data:

@@ -7,6 +7,7 @@ import me.mykindos.betterpvp.core.world.settler.Settler;
 import me.mykindos.betterpvp.core.world.settler.SettlerRarity;
 import me.mykindos.betterpvp.core.world.settler.SettlerState;
 import me.mykindos.betterpvp.core.world.site.SiteKey;
+import me.mykindos.betterpvp.core.world.site.storage.SiteRecord;
 import me.mykindos.betterpvp.core.world.site.storage.SiteStorage;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.Test;
@@ -60,17 +61,17 @@ class CampWageRecordTest {
     /** Keeps records as the bytes {@link SiteStorage#MAPPER} writes. */
     private static final class Bytes implements SiteStorage {
 
-        private final Map<SiteKey, byte[]> records = new HashMap<>();
+        private final Map<SiteKey, SiteRecord> records = new HashMap<>();
 
         @Override
-        public @NotNull CompletableFuture<Optional<byte[]>> read(@NotNull SiteKey key) {
+        public @NotNull CompletableFuture<Optional<SiteRecord>> read(@NotNull SiteKey key) {
             return CompletableFuture.completedFuture(Optional.ofNullable(records.get(key)));
         }
 
         @Override
-        public @NotNull CompletableFuture<Void> write(@NotNull SiteKey key, byte @NotNull [] data) {
-            records.put(key, data);
-            return CompletableFuture.completedFuture(null);
+        public @NotNull CompletableFuture<Long> write(@NotNull SiteKey key, byte @NotNull [] data, long version) {
+            records.put(key, new SiteRecord(data, version + 1));
+            return CompletableFuture.completedFuture(version + 1);
         }
 
         @Override

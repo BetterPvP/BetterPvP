@@ -28,7 +28,7 @@ public class CoreBlockBootstrap {
         final Reflections reflections = new Reflections(PACKAGE);
         final Adapters adapters = new Adapters(core);
         for (Class<? extends SmartBlock> clazz : reflections.getSubTypesOf(SmartBlock.class)) {
-            if (clazz.isInterface() || Modifier.isAbstract(clazz.getModifiers()) || !adapters.canLoad(clazz)) {
+            if (clazz.isInterface() || Modifier.isAbstract(clazz.getModifiers()) || !adapters.hasDependencies(clazz)) {
                 continue;
             }
 

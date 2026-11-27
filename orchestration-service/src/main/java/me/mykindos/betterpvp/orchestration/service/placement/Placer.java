@@ -26,6 +26,8 @@ import java.util.logging.Level;
  * <p>
  * A lease is live while its host advertises the site, or for {@code leaseTtl} after the later of when it was written
  * and when NATS last became reachable. Time spent with NATS unreachable therefore never counts against a lease.
+ * <p>
+ * A host that releases a lease is draining, so it is given nothing new for the next ten minutes.
  */
 @Log
 public class Placer {
@@ -40,6 +42,9 @@ public class Placer {
 
     /** Sites handed to a server that has not had time to count them yet, so its free slots read too high. */
     private final Map<String, Deque<Long>> promised = new ConcurrentHashMap<>();
+
+    /** Servers that released a lease because they are draining, with when they did. */
+    private final Map<String, Long> draining = new ConcurrentHashMap<>();
 
     private volatile long reachableSince;
 
@@ -78,6 +83,31 @@ public class Placer {
         }
     }
 
+    /**
+     * Drops the lease on a site if it still names {@code server}, and gives that server nothing new while it drains.
+     *
+     * @return whether a lease naming {@code server} was dropped
+     */
+    public boolean release(String siteId, long ownerId, String server) {
+        draining.put(server, clock.getAsLong());
+        try {
+            synchronized (locks.computeIfAbsent(DirectoryKeys.site(siteId, ownerId), key -> new Object())) {
+                for (int attempt = 0; attempt < 4; attempt++) {
+                    final Optional<Lease> current = leases.read(siteId, ownerId);
+                    if (current.isEmpty() || !current.get().getServer().equals(server)) {
+                        return false;
+                    }
+                    if (leases.release(siteId, ownerId, current.get())) {
+                        return true;
+                    }
+                }
+            }
+        } catch (IOException exception) {
+            log.log(Level.WARNING, "Could not release " + siteId + " for owner " + ownerId, exception);
+        }
+        return false;
+    }
+
     private PlacementDecision placeOwned(String siteId, long ownerId) throws IOException {
         for (int attempt = 0; attempt < 4; attempt++) {
             final Optional<Lease> current = leases.read(siteId, ownerId);
@@ -110,6 +140,7 @@ public class Placer {
         final List<ServerPool.Slots> servers = pool.servers(role);
         final Optional<ServerPool.Slots> roomiest = servers.stream()
                 .filter(slots -> free(slots) > 0)
+                .filter(slots -> !isDraining(slots.getServer()))
                 // The fullest with room first, so servers fill up and empty ones can be given back.
                 .min(Comparator.comparingInt(this::free));
         if (roomiest.isPresent()) {
@@ -123,6 +154,18 @@ public class Placer {
         }
         promise(allocated.get());
         return PlacementDecision.of(PlacementMessages.ALLOCATED, allocated.get());
+    }
+
+    private boolean isDraining(String server) {
+        final Long since = draining.get(server);
+        if (since == null) {
+            return false;
+        }
+        if (clock.getAsLong() - since > Duration.ofMinutes(10).toMillis()) {
+            draining.remove(server);
+            return false;
+        }
+        return true;
     }
 
     private int free(ServerPool.Slots slots) {

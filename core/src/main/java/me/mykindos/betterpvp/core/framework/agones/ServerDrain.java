@@ -22,7 +22,7 @@ import org.bukkit.event.server.ServerLoadEvent;
 import org.bukkit.scheduler.BukkitTask;
 import sun.misc.Signal;
 
-import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Empties the server before it stops: refuses arrivals, lets features save, moves players off, then tells Agones it
@@ -95,13 +95,17 @@ public class ServerDrain implements Listener {
         log.info("Draining: refusing arrivals and moving {} players to {}", Bukkit.getOnlinePlayers().size(),
                 drainTarget).submit();
 
-        Bukkit.getPluginManager().callEvent(new ServerDrainEvent());
+        final ServerDrainEvent event = new ServerDrainEvent(drainTarget);
+        Bukkit.getPluginManager().callEvent(event);
         Bukkit.savePlayers();
         for (World world : Bukkit.getWorlds()) {
             world.save();
         }
 
-        final ArrayList<Player> players = new ArrayList<>(Bukkit.getOnlinePlayers());
+        final List<Player> players = Bukkit.getOnlinePlayers().stream()
+                .filter(player -> !event.isClaimed(player))
+                .map(player -> (Player) player)
+                .toList();
         if (!players.isEmpty()) {
             network.transfer().transferAll(players, drainTarget);
         }

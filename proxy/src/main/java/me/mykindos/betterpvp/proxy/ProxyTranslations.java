@@ -1,4 +1,4 @@
-package me.mykindos.betterpvp.proxy.resourcepack;
+package me.mykindos.betterpvp.proxy;
 
 import net.kyori.adventure.key.Key;
 import net.kyori.adventure.translation.GlobalTranslator;
@@ -14,14 +14,14 @@ import java.util.Locale;
 import java.util.Properties;
 
 /**
- * Registers the pack prompt and disconnect messages with the global translator, so Velocity renders them in each
- * player's language. English is the fallback.
+ * Registers the proxy's messages with the global translator, so Velocity renders them in each player's language.
+ * English is the fallback.
  */
-public final class PackTranslations {
+public final class ProxyTranslations {
 
     private static final List<String> LANGUAGES = List.of("en", "ar", "de", "es", "fr", "ja", "ko", "ms", "nl", "pl", "ru", "zh");
 
-    private PackTranslations() {
+    private ProxyTranslations() {
     }
 
     public static void register() throws IOException {
@@ -29,7 +29,7 @@ public final class PackTranslations {
         store.defaultLocale(Locale.ENGLISH);
         for (String language : LANGUAGES) {
             final Locale locale = Locale.forLanguageTag(language);
-            try (InputStream stream = PackTranslations.class.getResourceAsStream("/translations/proxy_" + language + ".properties")) {
+            try (InputStream stream = ProxyTranslations.class.getResourceAsStream("/translations/proxy_" + language + ".properties")) {
                 if (stream == null) {
                     throw new IOException("Missing proxy translations for " + language);
                 }

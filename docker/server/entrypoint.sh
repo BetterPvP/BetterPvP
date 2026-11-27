@@ -97,7 +97,7 @@ echo "Starting $role on build ${BPVP_REVISION:-dev} with $(wc -l < .bpvp-jars) p
 if [[ -n ${AGONES_SDK_HTTP_PORT:-} ]]; then
   (
     while kill -0 $$ 2>/dev/null; do
-      curl -fsS -m 2 -o /dev/null -X POST -H 'Content-Type: application/json' -d '{}'         "http://localhost:$AGONES_SDK_HTTP_PORT/health" 2>/dev/null || true
+      curl -fsS -m 2 -o /dev/null -X POST -H 'Content-Type: application/json' -d '{}' "http://localhost:$AGONES_SDK_HTTP_PORT/health" 2>/dev/null || true
       sleep 5
     done
   ) &

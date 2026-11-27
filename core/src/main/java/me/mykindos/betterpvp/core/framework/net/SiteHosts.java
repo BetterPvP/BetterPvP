@@ -18,4 +18,13 @@ public interface SiteHosts {
      */
     @NotNull CompletableFuture<Optional<String>> hostFor(@NotNull String siteId, long ownerId, boolean owned,
                                                          @NotNull String asker);
+
+    /**
+     * Gives up an owned site this server held, once it has been saved, so it can open somewhere else straight away.
+     * Called by a server that is draining, which is then given nothing new. Hosts that never give up an owned site
+     * have nothing to release.
+     */
+    default @NotNull CompletableFuture<Void> release(@NotNull String siteId, long ownerId, @NotNull String server) {
+        return CompletableFuture.completedFuture(null);
+    }
 }

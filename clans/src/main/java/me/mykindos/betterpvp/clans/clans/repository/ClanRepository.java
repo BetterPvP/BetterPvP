@@ -8,7 +8,9 @@ import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.core.ClanCore;
 import me.mykindos.betterpvp.clans.clans.insurance.Insurance;
 import me.mykindos.betterpvp.clans.clans.insurance.InsuranceType;
+import me.mykindos.betterpvp.clans.clans.writer.CampGrant;
 import me.mykindos.betterpvp.clans.database.jooq.tables.records.ClanMetadataRecord;
+import me.mykindos.betterpvp.clans.database.jooq.tables.records.ClansRecord;
 import me.mykindos.betterpvp.clans.database.jooq.tables.records.GetClanKillLogsRecord;
 import me.mykindos.betterpvp.clans.logging.KillClanLog;
 import me.mykindos.betterpvp.core.Core;
@@ -36,10 +38,13 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BannerMeta;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Nullable;
+import org.jooq.Field;
 import org.jooq.Query;
 import org.jooq.Record2;
 import org.jooq.Result;
+import org.jooq.Table;
 import org.jooq.exception.DataAccessException;
+import org.jooq.impl.DSL;
 
 import java.util.ArrayList;
 import java.util.Base64;
@@ -94,18 +99,7 @@ public class ClanRepository implements IRepository<Clan> {
                     .fetch();
 
             for (var clanRecord : records) {
-                long clanId = clanRecord.get(CLANS.ID);
-                String name = clanRecord.get(CLANS.NAME);
-                String coreLocString = clanRecord.get(CLANS.HOME);
-                Location coreLoc = coreLocString == null || coreLocString.isEmpty() ? null : UtilWorld.stringToLocation(coreLocString);
-
-                Clan clan = new Clan(clanId);
-                clan.setName(name);
-                clan.getCore().setPosition(coreLoc);
-
-                loadMetadata(clan);
-                loadProperties(clan);
-                clanList.add(clan);
+                clanList.add(load(clanRecord));
             }
         } catch (Exception ex) {
             log.error("Failed to load clans", ex).submit();
@@ -113,6 +107,42 @@ public class ClanRepository implements IRepository<Clan> {
 
 
         return clanList;
+    }
+
+    /** Reads one clan's own row, metadata and properties. Members, relations and territory are read separately. */
+    public Optional<Clan> getById(long clanId) {
+        try {
+            return Optional.ofNullable(database.getDslContext()
+                    .selectFrom(CLANS)
+                    .where(CLANS.ID.eq(clanId))
+                    .fetchOne())
+                    .map(this::load);
+        } catch (Exception ex) {
+            log.error("Failed to load clan {}", clanId, ex).submit();
+            return Optional.empty();
+        }
+    }
+
+    /** Reads just a clan's name, or empty when the clan no longer exists. */
+    public Optional<String> getName(long clanId) {
+        return Optional.ofNullable(database.getDslContext()
+                .select(CLANS.NAME)
+                .from(CLANS)
+                .where(CLANS.ID.eq(clanId))
+                .fetchOne(CLANS.NAME));
+    }
+
+    private Clan load(ClansRecord clanRecord) {
+        String coreLocString = clanRecord.get(CLANS.HOME);
+        Location coreLoc = coreLocString == null || coreLocString.isEmpty() ? null : UtilWorld.stringToLocation(coreLocString);
+
+        Clan clan = new Clan(clanRecord.get(CLANS.ID));
+        clan.setName(clanRecord.get(CLANS.NAME));
+        clan.getCore().setPosition(coreLoc);
+
+        loadMetadata(clan);
+        loadProperties(clan);
+        return clan;
     }
 
     private void loadMetadata(Clan clan) {
@@ -225,7 +255,7 @@ public class ClanRepository implements IRepository<Clan> {
     }
 
     public void delete(Clan clan) {
-        queuedPropertyUpdates.entrySet().removeIf(entry -> entry.getKey().startsWith(String.valueOf(clan.getId())));
+        forgetQueuedProperties(clan);
 
         database.getAsyncDslContext()
                 .executeAsyncVoid(ctx -> ctx.deleteFrom(CLANS)
@@ -236,6 +266,11 @@ public class ClanRepository implements IRepository<Clan> {
                     return null;
                 });
         // The other tables cascade deletes
+    }
+
+    /** Drops property writes still waiting for a clan that is gone, so the next batch does not fail on it. */
+    public void forgetQueuedProperties(Clan clan) {
+        queuedPropertyUpdates.entrySet().removeIf(entry -> entry.getKey().startsWith(String.valueOf(clan.getId())));
     }
 
     public void updateClanCore(Clan clan) {
@@ -374,28 +409,32 @@ public class ClanRepository implements IRepository<Clan> {
     }
 
     public List<ClanMember> getMembers(Clan clan) {
-        List<ClanMember> members = new ArrayList<>();
-
         try {
-            var records = database.getDslContext()
-                    .select(CLAN_MEMBERS.asterisk(), CLIENTS.NAME, CLIENTS.UUID)
-                    .from(CLAN_MEMBERS)
-                    .innerJoin(CLIENTS)
-                    .on(CLIENTS.UUID.eq(CLAN_MEMBERS.MEMBER))
-                    .where(CLAN_MEMBERS.CLAN.eq(clan.getId()))
-                    .fetch();
-
-            for (var memberRecord : records) {
-                String uuid = memberRecord.get(CLIENTS.UUID);
-                ClanMember.MemberRank rank = ClanMember.MemberRank.valueOf(memberRecord.get(CLAN_MEMBERS.RANK));
-                String name = memberRecord.get(CLIENTS.NAME);
-
-                members.add(new ClanMember(UUID.fromString(uuid), rank, name));
-            }
+            return getMembers(clan.getId());
         } catch (Exception ex) {
             log.error("Failed to load clan members for {}", clan.getId(), ex).submit();
+            return new ArrayList<>();
         }
+    }
 
+    /** Reads a clan's members, failing rather than answering empty when the read fails. */
+    public List<ClanMember> getMembers(long clanId) {
+        List<ClanMember> members = new ArrayList<>();
+        var records = database.getDslContext()
+                .select(CLAN_MEMBERS.asterisk(), CLIENTS.NAME, CLIENTS.UUID)
+                .from(CLAN_MEMBERS)
+                .innerJoin(CLIENTS)
+                .on(CLIENTS.UUID.eq(CLAN_MEMBERS.MEMBER))
+                .where(CLAN_MEMBERS.CLAN.eq(clanId))
+                .fetch();
+
+        for (var memberRecord : records) {
+            String uuid = memberRecord.get(CLIENTS.UUID);
+            ClanMember.MemberRank rank = ClanMember.MemberRank.valueOf(memberRecord.get(CLAN_MEMBERS.RANK));
+            String name = memberRecord.get(CLIENTS.NAME);
+
+            members.add(new ClanMember(UUID.fromString(uuid), rank, name));
+        }
         return members;
     }
 
@@ -466,6 +505,26 @@ public class ClanRepository implements IRepository<Clan> {
         }
 
         return alliances;
+    }
+
+    /** The clans {@code clanId} is allied with, mapped to whether the alliance is trusted. */
+    public Map<Long, Boolean> getAllianceIds(long clanId) {
+        final Map<Long, Boolean> alliances = new HashMap<>();
+        database.getDslContext()
+                .selectFrom(CLAN_ALLIANCES)
+                .where(CLAN_ALLIANCES.CLAN.eq(clanId))
+                .forEach(row -> alliances.put(row.get(CLAN_ALLIANCES.ALLY_CLAN), row.get(CLAN_ALLIANCES.TRUSTED) != 0));
+        return alliances;
+    }
+
+    /** The clans {@code clanId} is an enemy of, mapped to its dominance over each. */
+    public Map<Long, Integer> getEnemyIds(long clanId) {
+        final Map<Long, Integer> enemies = new HashMap<>();
+        database.getDslContext()
+                .selectFrom(CLAN_ENEMIES)
+                .where(CLAN_ENEMIES.CLAN.eq(clanId))
+                .forEach(row -> enemies.put(row.get(CLAN_ENEMIES.ENEMY_CLAN), row.get(CLAN_ENEMIES.DOMINANCE)));
+        return enemies;
     }
 
     public void saveTrust(IClan clan, ClanAlliance alliance) {
@@ -546,6 +605,24 @@ public class ClanRepository implements IRepository<Clan> {
         return enemies;
     }
 //endregion
+
+    /** The camp permissions the Clans service has recorded for a clan. */
+    public List<CampGrant> getCampGrants(long clanId) {
+        final Table<?> table = DSL.table(DSL.name("clan_camp_permissions"));
+        final Field<String> scope = DSL.field(DSL.name("scope"), String.class);
+        final Field<String> rank = DSL.field(DSL.name("rank"), String.class);
+        final Field<String> action = DSL.field(DSL.name("action"), String.class);
+        final Field<Boolean> allowed = DSL.field(DSL.name("allowed"), Boolean.class);
+
+        return database.getDslContext()
+                .select(scope, rank, action, allowed)
+                .from(table)
+                .where(DSL.field(DSL.name("clan"), Long.class).eq(clanId))
+                .fetch(row -> new CampGrant(CampGrant.Scope.valueOf(row.value1()),
+                        row.value2().isEmpty() ? null : ClanMember.MemberRank.valueOf(row.value2()),
+                        row.value3().isEmpty() ? null : row.value3(),
+                        row.value4()));
+    }
 
     public Map<Integer, Double> getDominanceScale() {
         HashMap<Integer, Double> dominanceScale = new HashMap<>();

@@ -15,6 +15,7 @@ dependencies {
     compileOnly(libs.bundles.paper)
     paperweight.paperDevBundle(libs.versions.paper)
     implementation(libs.reflections)
+    implementation(project(":clans-protocol"))
 
     compileOnly(project(":core"))
     compileOnly(project(":progression"))

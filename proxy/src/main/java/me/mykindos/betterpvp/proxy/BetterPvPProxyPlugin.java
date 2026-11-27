@@ -8,8 +8,8 @@ import com.velocitypowered.api.plugin.annotation.DataDirectory;
 import com.velocitypowered.api.proxy.ProxyServer;
 import com.velocitypowered.api.proxy.messages.MinecraftChannelIdentifier;
 import me.mykindos.betterpvp.orchestration.transport.QueuePluginChannels;
+import me.mykindos.betterpvp.proxy.network.ProxyNetwork;
 import me.mykindos.betterpvp.proxy.resourcepack.PackReleaseFeed;
-import me.mykindos.betterpvp.proxy.resourcepack.PackTranslations;
 import me.mykindos.betterpvp.proxy.resourcepack.ResourcePackSender;
 import org.slf4j.Logger;
 
@@ -41,6 +41,7 @@ public class BetterPvPProxyPlugin {
         try {
             final ProxyConfig config = ProxyConfig.load(dataDirectory);
             logger.info("Loaded BetterPvP proxy config from {}", dataDirectory.resolve("config.toml"));
+            ProxyTranslations.register();
             proxyServer.getChannelRegistrar().register(MinecraftChannelIdentifier.from(QueuePluginChannels.QUEUE_REQUEST));
             final QueueAdmissionListener queueAdmissionListener = new QueueAdmissionListener(proxyServer, logger, config);
             proxyServer.getEventManager().register(this, queueAdmissionListener);
@@ -49,13 +50,15 @@ public class BetterPvPProxyPlugin {
             if (config.packsEnabled()) {
                 startResourcePacks(config);
             }
+            if (config.networkEnabled()) {
+                ProxyNetwork.start(this, proxyServer, config, logger);
+            }
         } catch (IOException ex) {
-            logger.error("Failed to load BetterPvP proxy config", ex);
+            logger.error("Failed to start the BetterPvP proxy", ex);
         }
     }
 
     private void startResourcePacks(ProxyConfig config) throws IOException {
-        PackTranslations.register();
         final AtomicReference<ResourcePackSender> sender = new AtomicReference<>();
         final PackReleaseFeed feed = new PackReleaseFeed(config, logger,
                 (previous, current) -> sender.get().onReleaseChanged(previous, current));

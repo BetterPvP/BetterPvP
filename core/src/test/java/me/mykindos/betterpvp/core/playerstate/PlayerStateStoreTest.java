@@ -33,8 +33,10 @@ import org.mockbukkit.mockbukkit.MockBukkit;
 import org.mockbukkit.mockbukkit.ServerMock;
 import org.mockbukkit.mockbukkit.entity.PlayerMock;
 import org.postgresql.ds.PGSimpleDataSource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.DockerClientFactory;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
 
 import javax.sql.DataSource;
 import java.util.UUID;
@@ -43,15 +45,16 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-@Testcontainers(disabledWithoutDocker = true)
+/** The store against a real Postgres. Skipped when Docker is not running. */
 class PlayerStateStoreTest {
 
     private static final NamespacedKey BLADE = new NamespacedKey("test", "blade");
 
-    private static PostgreSQLContainer<?> postgres;
+    private static GenericContainer<?> postgres;
     private static DataSource dataSource;
 
     private ServerMock server;
@@ -62,12 +65,16 @@ class PlayerStateStoreTest {
 
     @BeforeAll
     static void startDatabase() {
-        postgres = new PostgreSQLContainer<>("postgres:16-alpine");
+        assumeTrue(DockerClientFactory.instance().isDockerAvailable(), "Docker is not running");
+        postgres = new GenericContainer<>(DockerImageName.parse("postgres:16-alpine"))
+                .withEnv("POSTGRES_PASSWORD", "test")
+                .withExposedPorts(5432)
+                .waitingFor(Wait.forLogMessage(".*database system is ready to accept connections.*", 2));
         postgres.start();
         final PGSimpleDataSource source = new PGSimpleDataSource();
-        source.setUrl(postgres.getJdbcUrl());
-        source.setUser(postgres.getUsername());
-        source.setPassword(postgres.getPassword());
+        source.setUrl("jdbc:postgresql://" + postgres.getHost() + ":" + postgres.getMappedPort(5432) + "/postgres");
+        source.setUser("postgres");
+        source.setPassword("test");
         dataSource = source;
         Flyway.configure()
                 .dataSource(dataSource)
@@ -78,7 +85,9 @@ class PlayerStateStoreTest {
 
     @AfterAll
     static void stopDatabase() {
-        postgres.stop();
+        if (postgres != null) {
+            postgres.stop();
+        }
     }
 
     @BeforeEach

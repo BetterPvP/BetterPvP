@@ -15,6 +15,8 @@ include(":hub")
 include(":orchestration")
 include(":orchestration-service")
 include(":network-protocol")
+include(":sessions")
+include(":sessions-service")
 include(":proxy")
 
 if (File("./private/").exists()) {

@@ -21,4 +21,10 @@ public interface PlayerStateStore {
      * @return true if the state was stored, false if a save with the same or a higher version is already stored
      */
     @NotNull CompletableFuture<Boolean> save(@NotNull PlayerState state);
+
+    /**
+     * Raises the stored version to {@code version} if it is lower, so every save below it is rejected from now on.
+     * Does nothing for a player with no saved state.
+     */
+    @NotNull CompletableFuture<Void> fence(@NotNull UUID playerId, long version);
 }

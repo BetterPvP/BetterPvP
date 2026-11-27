@@ -32,6 +32,7 @@ dependencies {
     implementation(libs.hikari.cp)
     implementation(libs.jedis)
     implementation(project(":network-protocol"))
+    implementation(project(":sessions"))
     // BouncyCastle is only for NKey and JWT sign-in, which the network does not use
     implementation(libs.jnats) {
         exclude(group = "org.bouncycastle")
@@ -71,6 +72,8 @@ dependencies {
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
     // Real Postgres and NATS servers for the store and transport tests, which skip when Docker is not running
     testImplementation(libs.testcontainers)
+    // The handoff tests run two servers against a real sessions service
+    testImplementation(project(":sessions-service"))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

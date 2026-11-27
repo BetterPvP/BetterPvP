@@ -1,7 +1,7 @@
 {
   "all": [],
   "hub": ["dungeons.jar", "events.jar"],
-  "resource": ["dungeons.jar", "events.jar"],
+  "resource": [],
   "camp": ["dungeons.jar", "events.jar", "store.jar", "MythicMobs*.jar", "MCPets*.jar"],
   "dungeon": ["events.jar"],
   "event": ["dungeons.jar"]

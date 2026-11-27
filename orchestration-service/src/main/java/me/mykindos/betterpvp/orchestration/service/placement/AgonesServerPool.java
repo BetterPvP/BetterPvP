@@ -2,6 +2,7 @@ package me.mykindos.betterpvp.orchestration.service.placement;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.AllArgsConstructor;
 import lombok.Value;
 import lombok.extern.java.Log;
 
@@ -88,10 +89,29 @@ public class AgonesServerPool implements ServerPool {
 
         final String state = answer.path("status").path("state").asText();
         if (!"Allocated".equals(state)) {
-            log.warning("Agones could not allocate a " + role + " server from fleet " + fleet.getName() + ": " + state);
+            if (fleet.isScaleFromZero()) {
+                // Nothing is Ready, so start one. The ask after it boots gets it.
+                scale(fleet, 1);
+                log.info("Starting a " + role + " server in fleet " + fleet.getName());
+            } else {
+                log.warning("Agones could not allocate a " + role + " server from fleet " + fleet.getName() + ": " + state);
+            }
             return Optional.empty();
         }
+
+        if (fleet.isScaleFromZero()) {
+            // Agones never removes an Allocated server when a fleet shrinks, so this one stays until it shuts down.
+            scale(fleet, 0);
+        }
         return Optional.of(answer.path("status").path("gameServerName").asText());
+    }
+
+    private void scale(Fleet fleet, int replicas) throws IOException {
+        final Map<String, Object> patch = Map.of("spec", Map.of("replicas", replicas));
+        send(request("/apis/agones.dev/v1/namespaces/" + namespace + "/fleets/" + fleet.getName())
+                .header("Content-Type", "application/merge-patch+json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofByteArray(mapper.writeValueAsBytes(patch)))
+                .build());
     }
 
     private Fleet fleet(String role) throws IOException {
@@ -126,10 +146,19 @@ public class AgonesServerPool implements ServerPool {
         }
     }
 
-    /** The Agones fleet a role's servers come from, and the counter that holds their slots. */
+    /**
+     * The Agones fleet a role's servers come from, and the counter that holds their slots. A fleet that scales from
+     * zero is started when a server is wanted and none is Ready, and sits at zero otherwise.
+     */
     @Value
+    @AllArgsConstructor
     public static class Fleet {
         String name;
         String counter;
+        boolean scaleFromZero;
+
+        public Fleet(String name, String counter) {
+            this(name, counter, false);
+        }
     }
 }

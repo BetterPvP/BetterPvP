@@ -62,6 +62,9 @@ dependencies {
     testImplementation(libs.packetevents)
     testImplementation("org.mockito:mockito-core:5.23.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
+    // The player state store test runs its migration and queries against a real Postgres.
+    testImplementation("org.testcontainers:postgresql:1.21.3")
+    testImplementation("org.testcontainers:junit-jupiter:1.21.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

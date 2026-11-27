@@ -23,6 +23,7 @@ import me.mykindos.betterpvp.core.framework.net.NetworkLayer;
 import me.mykindos.betterpvp.core.world.site.storage.SiteStorage;
 import me.mykindos.betterpvp.core.framework.CurrentMode;
 import me.mykindos.betterpvp.core.framework.adapter.Adapters;
+import me.mykindos.betterpvp.core.framework.agones.AgonesLifecycle;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapter;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapters;
 import me.mykindos.betterpvp.core.framework.events.ServerStartEvent;
@@ -218,6 +219,8 @@ public class Core extends BPvPPlugin {
 
         injector.getInstance(SiteStorage.class).close();
         log.info("Site storage closed").submit();
+
+        injector.getInstance(AgonesLifecycle.class).shutdown();
 
         log.info("Closing logger factory...").submit();
         LoggerFactory.getInstance().close();

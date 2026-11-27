@@ -1,6 +1,8 @@
 package me.mykindos.betterpvp.core.injector;
 
 import com.google.inject.AbstractModule;
+import com.google.inject.Provides;
+import com.google.inject.Singleton;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.chat.filter.IFilterService;
@@ -9,6 +11,8 @@ import me.mykindos.betterpvp.core.chat.ignore.IIgnoreService;
 import me.mykindos.betterpvp.core.chat.ignore.impl.DefaultIgnoreService;
 import me.mykindos.betterpvp.core.database.connection.IDatabaseConnection;
 import me.mykindos.betterpvp.core.database.connection.PostgresDatabaseConnection;
+import me.mykindos.betterpvp.core.framework.agones.AgonesSdk;
+import me.mykindos.betterpvp.core.framework.agones.GameServerSdk;
 import me.mykindos.betterpvp.core.framework.blockbreak.global.GlobalBlockBreakRules;
 import me.mykindos.betterpvp.core.framework.blockbreak.global.GlobalBlockBreakRulesImpl;
 import me.mykindos.betterpvp.core.framework.blockbreak.packet.BlockBreakProgressService;
@@ -52,5 +56,11 @@ public class CoreInjectorModule extends AbstractModule {
         bind(BlockBreakResolver.class).to(DefaultBlockBreakResolver.class);
         bind(BlockBreakProgressService.class).to(BlockBreakProgressServiceImpl.class);
         log.info("Using default integrations").submit();
+    }
+
+    @Provides
+    @Singleton
+    GameServerSdk gameServerSdk() {
+        return AgonesSdk.fromEnvironment(System.getenv());
     }
 }

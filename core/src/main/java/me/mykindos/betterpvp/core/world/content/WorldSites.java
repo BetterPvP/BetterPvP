@@ -29,7 +29,7 @@ public class WorldSites {
         return registry.get(siteId).map(site -> switch (site.getWorldSource().getKind()) {
             case ADOPT -> world.getName().equals(site.getWorldSource().getValue());
             case CLONE -> world.getName().startsWith(SiteWorlds.worldNamePrefix(site.getId()));
-            case OWN -> world.getName().startsWith(site.getWorldSource().getValue());
+            case OWN, SLIME -> world.getName().startsWith(site.getWorldSource().getValue());
         }).orElse(false);
     }
 }

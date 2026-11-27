@@ -3,6 +3,9 @@ package me.mykindos.betterpvp.orchestration.service;
 import com.sun.net.httpserver.HttpServer;
 import me.mykindos.betterpvp.orchestration.policy.QueuePriorityPolicy;
 import me.mykindos.betterpvp.orchestration.service.http.OrchestrationHttpHandler;
+import me.mykindos.betterpvp.orchestration.service.placement.PlacementConfig;
+import me.mykindos.betterpvp.orchestration.service.placement.PlacementService;
+import org.tomlj.Toml;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -35,23 +38,30 @@ public final class OrchestrationServiceApplication {
         server.createContext("/", new OrchestrationHttpHandler(gateway));
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
-        final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
+        final PlacementConfig placementConfig = PlacementConfig.from(Toml.parse(configPath));
+        final PlacementService placement = placementConfig.isEnabled() ? PlacementService.start(placementConfig) : null;
+        final Runnable stop = () -> {
+            gateway.shutdown();
+            if (placement != null) {
+                placement.close();
+            }
+            server.stop(0);
+        };
+
+        final AtomicBoolean shuttingDown = new AtomicBoolean(false);
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (shuttingDown.compareAndSet(false, true)) {
-                gateway.shutdown();
-                server.stop(0);
+                stop.run();
             }
         }));
 
-        startConsoleListener(server, gateway, shuttingDown);
+        startConsoleListener(stop, shuttingDown);
 
         System.out.println("Orchestration service listening on " + config.host() + ":" + config.port() + " using config " + configPath.toAbsolutePath());
     }
 
-    private static void startConsoleListener(HttpServer server,
-                                             InMemoryOrchestrationGateway gateway,
-                                             AtomicBoolean shuttingDown) {
+    private static void startConsoleListener(Runnable stop, AtomicBoolean shuttingDown) {
         final Thread consoleThread = new Thread(() -> {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(System.in))) {
                 String line;
@@ -60,8 +70,7 @@ public final class OrchestrationServiceApplication {
                     if (command.equalsIgnoreCase("stop") || command.equalsIgnoreCase("exit")) {
                         if (shuttingDown.compareAndSet(false, true)) {
                             System.out.println("Stopping orchestration service");
-                            gateway.shutdown();
-                            server.stop(0);
+                            stop.run();
                             System.exit(0);
                         }
                         return;

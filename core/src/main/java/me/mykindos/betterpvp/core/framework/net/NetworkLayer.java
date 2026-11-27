@@ -15,7 +15,8 @@ import java.util.Optional;
  * <p>
  * Every seam is chosen the same way: a name from config, looked up in {@link NetworkTransports}. The names that ship
  * are {@code proxy}, {@code nats}, {@code redis}, {@code local}, {@code service} and {@code directory}, and anything
- * another network registers stands beside them on equal terms. This is the only class that chooses, so joining a different network is a registration and a config
+ * another network registers stands beside them on equal terms. This is the only class that chooses, so joining a
+ * different network is a registration and a config
  * value, never an edit to whatever is using a seam.
  */
 @Singleton

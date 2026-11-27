@@ -100,6 +100,20 @@ class PlacerTest {
     }
 
     @Test
+    @DisplayName("a camp server with six slots takes six camps, and the seventh goes to another server")
+    void aSeventhCampGoesElsewhere() {
+        pool.servers = List.of(new ServerPool.Slots("camp-a", 6));
+
+        for (long clan = 1; clan <= 6; clan++) {
+            assertEquals("camp-a", placer.place("camp", clan, true).getServer());
+        }
+        final PlacementDecision seventh = placer.place("camp", 7, true);
+
+        assertEquals("camp-new", seventh.getServer());
+        assertEquals(List.of("camp-new"), pool.allocations);
+    }
+
+    @Test
     @DisplayName("a live lease answers with its host")
     void liveLeaseIsHosted() {
         pool.servers = List.of(new ServerPool.Slots("camp-a", 5));

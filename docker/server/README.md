@@ -77,6 +77,8 @@ docker/server/check.sh ghcr.io/betterpvp/server:local
 
 A jar that hard-depends on a dropped one goes too, or Paper refuses to load it. Store needs MCPets, which needs MythicMobs, so camp servers leave out all three.
 
+A `camp` server sets its own player limit when it starts: `core.agones.campSlots` (6) times `clans.members.max` (8) plus `clans.camp.visitors` (4), which is 72. Every other role keeps the limit in `server.properties`.
+
 ## Setup
 
 The workflow needs these in the repository settings. Save each key with the team's secrets.

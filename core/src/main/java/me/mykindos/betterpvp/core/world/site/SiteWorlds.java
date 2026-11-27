@@ -45,10 +45,12 @@ public class SiteWorlds {
     private static final String TEMPLATE_MARKER = ".site-template";
 
     private final Core core;
+    private final SlimeWorlds slime;
 
     @Inject
-    public SiteWorlds(@NotNull Core core) {
+    public SiteWorlds(@NotNull Core core, @NotNull SlimeWorlds slime) {
         this.core = core;
+        this.slime = slime;
     }
 
     /**
@@ -67,7 +69,7 @@ public class SiteWorlds {
         final WorldSource source = site.getWorldSource();
         return switch (source.getKind()) {
             case ADOPT -> source.getValue();
-            case OWN -> source.getValue() + key.getOwnerId();
+            case OWN, SLIME -> source.getValue() + key.getOwnerId();
             case CLONE -> worldNamePrefix(site.getId()) + instanceId.toString().substring(0, 8);
         };
     }
@@ -87,6 +89,9 @@ public class SiteWorlds {
      * configured with. An owned folder already on disk that was built from a different template is rebuilt from this
      * one, which is the whole of what changing it comes down to.
      * <p>
+     * A slime site whose template has a slime file is built in memory from it every time, so a changed template takes
+     * effect the next time the world opens. Without one it is kept on disk like an owned site.
+     * <p>
      * A null template means the owner has not chosen, which is deliberately not the same as choosing the site's
      * default: a folder already on disk is left exactly as it is. Otherwise a record that had not finished loading
      * would read as "no choice" and rebuild somebody's world out from under them.
@@ -98,8 +103,13 @@ public class SiteWorlds {
             return CompletableFuture.completedFuture(loaded);
         }
 
+        final String chosen = Objects.requireNonNullElse(template, source.getTemplate());
+        if (source.getKind() == WorldSource.Kind.SLIME && chosen != null && slime.canBuild(chosen)) {
+            return slime.open(chosen, worldName);
+        }
+
         if (isOnDisk(worldName)) {
-            if (source.getKind() != WorldSource.Kind.OWN || template == null || template.equals(builtFrom(worldName))) {
+            if (!source.isOwned() || template == null || template.equals(builtFrom(worldName))) {
                 return load(worldName, false);
             }
 
@@ -112,9 +122,7 @@ public class SiteWorlds {
                     "World '" + worldName + "' is adopted but does not exist"));
         }
 
-        final String seed = source.getKind() == WorldSource.Kind.CLONE
-                ? source.getValue()
-                : Objects.requireNonNullElse(template, source.getTemplate());
+        final String seed = source.getKind() == WorldSource.Kind.CLONE ? source.getValue() : chosen;
 
         // An owned site with nothing to build from generates a world instead, since nothing says an owner's world
         // has to start from anything in particular.
@@ -183,6 +191,11 @@ public class SiteWorlds {
             }
 
             evacuate(world);
+            if (slime.isOpen(worldName)) {
+                slime.close(worldName).whenComplete((unused, ex) -> complete(future, ex));
+                return;
+            }
+
             if (!Bukkit.unloadWorld(world, true)) {
                 future.completeExceptionally(new IllegalStateException("Could not unload world: " + worldName));
                 return;
@@ -203,6 +216,18 @@ public class SiteWorlds {
 
         UtilServer.runTask(core, () -> {
             final World world = Bukkit.getWorld(worldName);
+            if (world != null && slime.isOpen(worldName)) {
+                evacuate(world);
+                slime.close(worldName).whenComplete((unused, ex) -> {
+                    if (ex != null) {
+                        future.completeExceptionally(ex);
+                    } else {
+                        UtilServer.runTask(core, () -> release(worldName, future));
+                    }
+                });
+                return;
+            }
+
             if (world != null) {
                 evacuate(world);
                 if (!Bukkit.unloadWorld(world, false)) {
@@ -233,13 +258,15 @@ public class SiteWorlds {
     /** Announces the world as gone, then deletes its folders off-thread. Must be called on the main thread. */
     private void release(@NotNull String worldName, @NotNull CompletableFuture<Void> future) {
         UtilServer.callEvent(new SiteWorldReleasedEvent(worldName));
-        deleteFolders(worldName).whenComplete((unused, ex) -> {
-            if (ex != null) {
-                future.completeExceptionally(ex);
-            } else {
-                future.complete(null);
-            }
-        });
+        deleteFolders(worldName).whenComplete((unused, ex) -> complete(future, ex));
+    }
+
+    private static void complete(@NotNull CompletableFuture<Void> future, Throwable ex) {
+        if (ex != null) {
+            future.completeExceptionally(ex);
+        } else {
+            future.complete(null);
+        }
     }
 
     /** Every cloned instance world currently on disk, whether or not anything is tracking it. */

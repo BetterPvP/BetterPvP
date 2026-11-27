@@ -49,6 +49,9 @@ dependencies {
     compileOnly(libs.packetevents)
     compileOnly(libs.bundles.paper)
     compileOnly(libs.fawe)
+    compileOnly("live.minehub:polarpaper:2.3.1") {
+        isTransitive = false
+    }
     compileOnly(libs.fawebukkit) {
         exclude(group = "org.lz4", module = "lz4-java")
     }

@@ -22,8 +22,9 @@ import me.mykindos.betterpvp.clans.world.camp.upgrade.Harbourmaster;
 import me.mykindos.betterpvp.clans.world.camp.upgrade.GuestQuarters;
 import me.mykindos.betterpvp.clans.world.camp.upgrade.WagePolicy;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
@@ -44,6 +45,7 @@ import me.mykindos.betterpvp.core.world.site.SiteKey;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.ComponentLike;
 import net.kyori.adventure.text.format.NamedTextColor;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
@@ -80,6 +82,7 @@ public class HallMenus {
     private final Harbourmaster harbourmaster;
     private final GuestQuarters guestQuarters;
     private final WagePolicy wagePolicy;
+    private final Ledger ledger;
 
     @Inject
     public HallMenus(@NotNull ClanManager clanManager, @NotNull ClientManager clientManager,
@@ -92,7 +95,9 @@ public class HallMenus {
                      @NotNull RecruitConfig recruitConfig, @NotNull FarmWorkplace farm,
                      @NotNull CampProsperity prosperity, @NotNull CampStore store, @NotNull CampUpgrades upgrades,
                      @NotNull StructureMenus structureMenus, @NotNull Harbourmaster harbourmaster,
-                     @NotNull GuestQuarters guestQuarters, @NotNull WagePolicy wagePolicy) {
+                     @NotNull GuestQuarters guestQuarters, @NotNull WagePolicy wagePolicy,
+                     @NotNull Ledger ledger) {
+        this.ledger = ledger;
         this.clanManager = clanManager;
         this.clientManager = clientManager;
         this.permissions = permissions;
@@ -155,12 +160,17 @@ public class HallMenus {
                     UtilFormat.formatNumber((int) amount), NamedTextColor.YELLOW)));
             return;
         }
-        gamer.saveProperty(GamerProperty.BALANCE, gamer.getBalance() - (int) amount);
-        wageFund.deposit(key, amount);
-        payroll.settle(key);
-        UtilServer.callEvent(new WageFundPaidEvent(key, player, amount));
-        confirm(player, "clans.camp.hall.wages.paid", CoinsTag.of(Component.text(
-                UtilFormat.formatNumber((int) amount), NamedTextColor.WHITE)));
+        ledger.move(LedgerParty.of(gamer), LedgerParty.system(LedgerAccounts.CAMP), amount, "camp.wage_fund").thenAccept(receipt -> {
+            if (!receipt.isPosted()) {
+                refuse(player, "core.ledger.unavailable");
+                return;
+            }
+            wageFund.deposit(key, amount);
+            payroll.settle(key);
+            UtilServer.callEvent(new WageFundPaidEvent(key, player, amount));
+            confirm(player, "clans.camp.hall.wages.paid", CoinsTag.of(Component.text(
+                    UtilFormat.formatNumber((int) amount), NamedTextColor.WHITE)));
+        });
     }
 
     void tell(@NotNull Player player, @NotNull Component message) {

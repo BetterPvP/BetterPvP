@@ -3,9 +3,12 @@ package me.mykindos.betterpvp.clans.world.camp.settler.recruit;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
 import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.framework.economy.ledger.InProcessLedger;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,12 +24,14 @@ class CampCoinsTest {
     private final ClientManager clientManager = mock(ClientManager.class, RETURNS_DEEP_STUBS);
     private final Gamer gamer = mock(Gamer.class);
     private final Player player = mock(Player.class);
-    private final CampCoins coins = new CampCoins(clientManager);
+    private final CampCoins coins = new CampCoins(clientManager, new InProcessLedger(posting -> {
+    }));
 
     @BeforeEach
     void setUp() {
         when(clientManager.search().online(player).getGamer()).thenReturn(gamer);
         when(gamer.getBalance()).thenReturn(1_000);
+        when(gamer.getUniqueId()).thenReturn(UUID.randomUUID());
     }
 
     @Test

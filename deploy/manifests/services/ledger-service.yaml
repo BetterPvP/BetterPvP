@@ -1,0 +1,51 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: ledger
+  namespace: bpvp
+spec:
+  name: ledger
+  owner: betterpvp
+  cluster:
+    name: postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ledger-service
+  namespace: bpvp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ledger-service
+  template:
+    metadata:
+      labels:
+        app: ledger-service
+    spec:
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: ledger-service
+          image: __IMAGE__
+          imagePullPolicy: __PULL_POLICY__
+          env:
+            - name: LEDGER_NATS_URL
+              value: nats://nats:4222
+            - name: LEDGER_NATS_PREFIX
+              value: bpvp
+            - name: LEDGER_DB_URL
+              value: jdbc:postgresql://postgres-rw:5432/ledger
+            - name: LEDGER_DB_USER
+              value: betterpvp
+            - name: LEDGER_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-app
+                  key: password
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 384Mi

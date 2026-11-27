@@ -9,6 +9,11 @@ import me.mykindos.betterpvp.core.client.gamer.Gamer;
 import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.command.Command;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
+import me.mykindos.betterpvp.ledger.LedgerReceipt;
+import me.mykindos.betterpvp.ledger.LedgerStatus;
 import me.mykindos.betterpvp.core.command.SubCommand;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import net.kyori.adventure.text.Component;
@@ -18,6 +23,7 @@ import org.bukkit.entity.Player;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 
 @CustomLog
 @Singleton
@@ -40,6 +46,17 @@ public class BalanceCommand extends Command {
         return "core.command.balance.description";
     }
 
+    /** Gives {@code gamer} {@code delta} coins, or takes them when it is negative. */
+    private static CompletableFuture<LedgerReceipt> adjust(Ledger ledger, Gamer gamer, long delta, String reason) {
+        if (delta == 0) {
+            return CompletableFuture.completedFuture(LedgerReceipt.of(LedgerStatus.POSTED));
+        }
+        final LedgerParty admin = LedgerParty.system(LedgerAccounts.ADMIN);
+        return delta > 0
+                ? ledger.move(admin, LedgerParty.of(gamer), delta, reason)
+                : ledger.move(LedgerParty.of(gamer), admin, -delta, reason);
+    }
+
     @Override
     public void execute(Player player, Client client, String... args) {
         final Gamer gamer = client.getGamer();
@@ -53,10 +70,12 @@ public class BalanceCommand extends Command {
     private static class GiveBalanceSubCommand extends Command {
 
         private final ClientManager clientManager;
+        private final Ledger ledger;
 
         @Inject
-        public GiveBalanceSubCommand(ClientManager clientManager) {
+        public GiveBalanceSubCommand(ClientManager clientManager, Ledger ledger) {
             this.clientManager = clientManager;
+            this.ledger = ledger;
         }
 
         @Override
@@ -88,20 +107,24 @@ public class BalanceCommand extends Command {
                     int amountToPay = Integer.parseInt(args[1]);
 
                     final Gamer targetGamer = targetClient.getGamer();
-                    targetGamer.saveProperty(GamerProperty.BALANCE, targetGamer.getBalance() + amountToPay);
+                    adjust(ledger, targetGamer, amountToPay, "admin.give").thenAccept(receipt -> {
+                        if (!receipt.isPosted()) {
+                            UtilMessage.message(player, ECONOMY_PREFIX, "core.ledger.unavailable");
+                            return;
+                        }
+                        UtilMessage.message(player, ECONOMY_PREFIX, "core.command.balance.give.success",
+                                Component.text(targetClient.getName(), NamedTextColor.YELLOW),
+                                Component.text("$" + String.format("%,d", amountToPay), NamedTextColor.GREEN));
 
-                    UtilMessage.message(player, ECONOMY_PREFIX, "core.command.balance.give.success",
-                            Component.text(targetClient.getName(), NamedTextColor.YELLOW),
-                            Component.text("$" + String.format("%,d", amountToPay), NamedTextColor.GREEN));
+                        Player targetPlayer = Bukkit.getPlayer(UUID.fromString(targetGamer.getUuid()));
+                        if (targetPlayer != null) {
+                            UtilMessage.message(targetPlayer, ECONOMY_PREFIX, "core.command.balance.pay.received",
+                                    Component.text("$" + String.format("%,d", amountToPay), NamedTextColor.GREEN),
+                                    Component.text(player.getName(), NamedTextColor.YELLOW));
+                        }
 
-                    Player targetPlayer = Bukkit.getPlayer(UUID.fromString(targetGamer.getUuid()));
-                    if (targetPlayer != null) {
-                        UtilMessage.message(targetPlayer, ECONOMY_PREFIX, "core.command.balance.pay.received",
-                                Component.text("$" + String.format("%,d", amountToPay), NamedTextColor.GREEN),
-                                Component.text(player.getName(), NamedTextColor.YELLOW));
-                    }
-
-                    log.info("{} gave {} ${}", player, targetClient.getName(), amountToPay).submit();
+                        log.info("{} gave {} ${}", player, targetClient.getName(), amountToPay).submit();
+                    });
 
                 } catch (NumberFormatException ex) {
                     UtilMessage.message(player, ECONOMY_PREFIX, "core.command.balance.invalid_number");
@@ -125,10 +148,12 @@ public class BalanceCommand extends Command {
     private static class SetBalanceSubCommand extends Command {
 
         private final ClientManager clientManager;
+        private final Ledger ledger;
 
         @Inject
-        public SetBalanceSubCommand(ClientManager clientManager) {
+        public SetBalanceSubCommand(ClientManager clientManager, Ledger ledger) {
             this.clientManager = clientManager;
+            this.ledger = ledger;
         }
 
         @Override
@@ -160,13 +185,17 @@ public class BalanceCommand extends Command {
                     int amount = Integer.parseInt(args[1]);
 
                     final Gamer targetGamer = targetClient.getGamer();
-                    targetGamer.saveProperty(GamerProperty.BALANCE, amount);
+                    adjust(ledger, targetGamer, (long) amount - targetGamer.getBalance(), "admin.set").thenAccept(receipt -> {
+                        if (!receipt.isPosted()) {
+                            UtilMessage.message(player, ECONOMY_PREFIX, "core.ledger.unavailable");
+                            return;
+                        }
+                        UtilMessage.message(player, ECONOMY_PREFIX, "core.command.balance.set.success",
+                                Component.text(targetClient.getName(), NamedTextColor.YELLOW),
+                                Component.text("$" + String.format("%,d", amount), NamedTextColor.GREEN));
 
-                    UtilMessage.message(player, ECONOMY_PREFIX, "core.command.balance.set.success",
-                            Component.text(targetClient.getName(), NamedTextColor.YELLOW),
-                            Component.text("$" + String.format("%,d", amount), NamedTextColor.GREEN));
-
-                    log.info("{} set {}'s balance to ${}", player, targetClient.getName(), amount).submit();
+                        log.info("{} set {}'s balance to ${}", player, targetClient.getName(), amount).submit();
+                    });
 
                 } catch (NumberFormatException ex) {
                     UtilMessage.message(player, ECONOMY_PREFIX, "core.command.balance.invalid_number");

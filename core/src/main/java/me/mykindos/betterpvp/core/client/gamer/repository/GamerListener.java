@@ -11,6 +11,7 @@ import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.gamer.properties.GamerPropertyUpdateEvent;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.config.Config;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.locale.Translations;
@@ -52,10 +53,12 @@ public class GamerListener implements Listener {
     private String shop;
 
     private final ClientManager manager;
+    private final Ledger ledger;
 
     @Inject
-    public GamerListener(Core core, ClientManager manager) {
+    public GamerListener(Core core, ClientManager manager, Ledger ledger) {
         this.manager = manager;
+        this.ledger = ledger;
 
         this.header = new PermanentComponent(gamer -> Component.text("BetterPvP ", NamedTextColor.GOLD)
                 .append(Translations.component("core.tab.header.network",
@@ -149,6 +152,8 @@ public class GamerListener implements Listener {
         if (preferredSpawnOptional.isEmpty()) {
             gamer.saveProperty(GamerProperty.PREFERRED_SPAWN, "");
         }
+
+        ledger.open(gamer);
 
     }
 

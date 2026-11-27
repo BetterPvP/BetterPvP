@@ -1,0 +1,32 @@
+apiVersion: shulkermc.io/v1alpha1
+kind: MinecraftCluster
+metadata:
+  name: bpvp
+  namespace: bpvp
+spec: {}
+---
+apiVersion: shulkermc.io/v1alpha1
+kind: ProxyFleet
+metadata:
+  name: proxy
+  namespace: bpvp
+spec:
+  clusterRef:
+    name: bpvp
+  replicas: 2
+  service:
+    type: LoadBalancer
+  template:
+    spec:
+      version:
+        channel: Velocity
+        name: latest
+      config: {}
+      podOverrides:
+        image:
+          name: itzg/mc-proxy:2026.11.2-java25
+        resources:
+          requests:
+            memory: 384Mi
+          limits:
+            memory: 768Mi

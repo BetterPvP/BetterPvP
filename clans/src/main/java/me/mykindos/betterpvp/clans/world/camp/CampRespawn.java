@@ -8,6 +8,7 @@ import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.fatigue.RespawnHoldService;
 import me.mykindos.betterpvp.clans.world.camp.structure.CampStructures;
+import me.mykindos.betterpvp.clans.world.spawn.Spawn;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.world.construction.ConstructionSites;
 import me.mykindos.betterpvp.core.world.construction.StructureCondition;
@@ -27,15 +28,18 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerRespawnEvent;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Every clan member respawns at their own camp's Barracks, wherever they died, working or not. A camp loaded on this
  * server takes them straight there. Otherwise they come back at the normal spawn and are sent on to their camp,
- * landing at the Barracks, which is also where they stay if the camp cannot be reached. Players without a clan
- * respawn as they otherwise would. A {@link CampRespawnEvent} lets another spot or landing stand in for the Barracks.
+ * landing at the Barracks. Players without a clan, and members whose camp cannot be reached, end up at the main spawn:
+ * where they respawned when this server holds it, and sent to whichever server does otherwise. A
+ * {@link CampRespawnEvent} lets another spot or landing stand in for the Barracks.
  */
 @CustomLog
 @BPvPListener
@@ -74,6 +78,9 @@ public class CampRespawn implements Listener {
         final Player player = event.getPlayer();
         final Optional<Clan> clan = clanManager.getClanByPlayer(player);
         if (clan.isEmpty()) {
+            if (!holdsMainSpawn()) {
+                travel(player, SiteKey.of(Spawn.SITE_ID), null);
+            }
             return;
         }
 
@@ -92,8 +99,11 @@ public class CampRespawn implements Listener {
         travel(player, key, respawn.getLanding());
     }
 
-    /** Sends a respawned member to {@code landing} in their camp, once any respawn hold has let them go. */
-    private void travel(@NotNull Player player, @NotNull SiteKey key, @NotNull String landing) {
+    /**
+     * Sends a respawned player to {@code landing} in {@code key}, once any respawn hold has let them go. Failing that,
+     * they go on to the main spawn if it is not here.
+     */
+    private void travel(@NotNull Player player, @NotNull SiteKey key, @Nullable String landing) {
         new BukkitRunnable() {
             @Override
             public void run() {
@@ -105,15 +115,30 @@ public class CampRespawn implements Listener {
                     return;
                 }
                 cancel();
-                placement.locate(key, Party.solo(player.getUniqueId()))
-                        .thenCompose(handle -> placement.send(player, handle, landing))
-                        .exceptionally(error -> {
-                            log.warn("Could not send {} to their camp's Barracks after respawning", player.getName(),
-                                    error).submit();
-                            return false;
-                        });
+                final SiteKey mainSpawn = SiteKey.of(Spawn.SITE_ID);
+                send(player, key, landing).thenAccept(arrived -> {
+                    if (!arrived && !key.equals(mainSpawn) && !holdsMainSpawn()) {
+                        send(player, mainSpawn, null);
+                    }
+                });
             }
         }.runTaskTimer(clans, 1L, 20L);
+    }
+
+    private @NotNull CompletableFuture<Boolean> send(@NotNull Player player, @NotNull SiteKey key,
+                                                     @Nullable String landing) {
+        return placement.locate(key, Party.solo(player.getUniqueId()))
+                .thenCompose(handle -> landing == null
+                        ? placement.send(player, handle)
+                        : placement.send(player, handle, landing))
+                .exceptionally(error -> {
+                    log.warn("Could not send {} to {} after respawning", player.getName(), key, error).submit();
+                    return false;
+                });
+    }
+
+    private boolean holdsMainSpawn() {
+        return !instances.forKey(SiteKey.of(Spawn.SITE_ID)).isEmpty();
     }
 
     /** Where the Barracks in {@code world} puts respawning members, broken or not. */

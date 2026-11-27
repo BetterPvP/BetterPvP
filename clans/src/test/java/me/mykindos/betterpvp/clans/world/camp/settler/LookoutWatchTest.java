@@ -1,9 +1,12 @@
 package me.mykindos.betterpvp.clans.world.camp.settler;
 
+import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
+import me.mykindos.betterpvp.clans.clans.alert.ClanAlerts;
 import me.mykindos.betterpvp.clans.world.camp.Camps;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
+import me.mykindos.betterpvp.core.framework.net.MessageBus;
 import me.mykindos.betterpvp.core.world.settler.Roster;
 import me.mykindos.betterpvp.core.world.settler.Settler;
 import me.mykindos.betterpvp.core.world.settler.SettlerRarity;
@@ -75,7 +78,8 @@ class LookoutWatchTest {
         });
         bukkit.when(Bukkit::getOnlinePlayers).thenAnswer(invocation -> List.of(online));
 
-        watch = new LookoutWatch(camps, clanManager, settlers, new CampWideTraits(ShippedSettlers.config()));
+        final ClanAlerts alerts = new ClanAlerts(mock(Clans.class), clanManager, mock(MessageBus.class));
+        watch = new LookoutWatch(camps, alerts, settlers, new CampWideTraits(ShippedSettlers.config()));
     }
 
     @AfterEach

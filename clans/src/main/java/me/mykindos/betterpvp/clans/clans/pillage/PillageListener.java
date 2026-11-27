@@ -7,6 +7,7 @@ import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.ClanProperty;
+import me.mykindos.betterpvp.clans.clans.alert.ClanAlerts;
 import me.mykindos.betterpvp.clans.clans.insurance.Insurance;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageEndEvent;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageStartEvent;
@@ -20,6 +21,7 @@ import me.mykindos.betterpvp.core.config.Config;
 import me.mykindos.betterpvp.core.framework.delayedactions.events.ClanCoreTeleportEvent;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
@@ -67,15 +69,17 @@ public class PillageListener implements Listener {
     private final DamageLogManager damageLogManager;
     private final OfflineMessagesHandler offlineMessagesHandler;
     private final ClanWriter writer;
+    private final ClanAlerts alerts;
 
     @Inject
-    public PillageListener(Clans clans, ClanManager clanManager, PillageHandler pillageHandler, DamageLogManager damageLogManager, OfflineMessagesHandler offlineMessagesHandler, ClanWriter writer) {
+    public PillageListener(Clans clans, ClanManager clanManager, PillageHandler pillageHandler, DamageLogManager damageLogManager, OfflineMessagesHandler offlineMessagesHandler, ClanWriter writer, ClanAlerts alerts) {
         this.clans = clans;
         this.clanManager = clanManager;
         this.pillageHandler = pillageHandler;
         this.damageLogManager = damageLogManager;
         this.offlineMessagesHandler = offlineMessagesHandler;
         this.writer = writer;
+        this.alerts = alerts;
     }
 
     @UpdateEvent(delay = 5000)
@@ -137,6 +141,15 @@ public class PillageListener implements Listener {
                 Component.text(pillager.getName(), NamedTextColor.RED),
                 Component.text(pillaged.getName(), NamedTextColor.RED));
         Bukkit.getOnlinePlayers().forEach(player -> UtilSound.playSound(player, Sound.ITEM_GOAT_HORN_SOUND_1, 1f, 0.8f, true));
+
+        final Component started = UtilMessage.getPrefix(Translations.component("clans.prefix"))
+                .append(Translations.component("clans.pillage.started",
+                        Component.text(pillager.getName(), NamedTextColor.RED),
+                        Component.text(pillaged.getName(), NamedTextColor.RED)));
+        final net.kyori.adventure.sound.Sound horn = net.kyori.adventure.sound.Sound.sound(Sound.ITEM_GOAT_HORN_SOUND_1,
+                net.kyori.adventure.sound.Sound.Source.MASTER, 1f, 0.8f);
+        alerts.alertElsewhere(pillaged.getId(), started, horn);
+        alerts.alertElsewhere(pillager.getId(), started, horn);
 
         pillaged.getMembers().forEach(clanMember -> {
             offlineMessagesHandler.sendOfflineMessage(clanMember.getUuid(),

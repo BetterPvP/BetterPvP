@@ -95,6 +95,7 @@ subprojects {
         relocate("com.github.benmanes.caffeine", "me.mykindos.betterpvp.caffeine")
         relocate("com.jeff_media.morepersistentdatatypes", "me.mykindos.morepersistentdatatypes")
         relocate("redis.clients.jedis", "me.mykindos.betterpvp.jedis")
+        relocate("io.nats", "me.mykindos.betterpvp.nats")
         archiveBaseName.set(project.name)
         archiveVersion.set("")
         archiveClassifier.set("")

@@ -29,8 +29,11 @@ public class LeaderboardLoader extends Loader {
 
     @Override
     public void load(Class<?> clazz) {
-        if (!adapters.canLoad(clazz)) {
+        if (!adapters.hasDependencies(clazz)) {
             log.warn("Could not load leaderboard " + clazz.getSimpleName() + "! Dependencies not found!").submit();
+            return;
+        }
+        if (!adapters.runsOnThisRole(clazz)) {
             return;
         }
 

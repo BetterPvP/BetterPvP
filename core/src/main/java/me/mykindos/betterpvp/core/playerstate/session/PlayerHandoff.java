@@ -18,13 +18,16 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Moves a player's state onto this server when they arrive and off it when they leave.
  * <p>
  * Arriving claims the player, fences the stored state at the lease's first version so the previous owner can no
- * longer save, then loads it. Leaving saves and then releases. Every save under a lease uses a higher version than
+ * longer save, then loads it. Leaving saves and then releases, and while the save cannot reach the store it is retried
+ * for up to a minute with the player still held, so the next server waits for it. Every save under a lease uses a
+ * higher version than
  * the last, and a newer lease's versions outrank an older one's, so a stale server's save is always rejected.
  */
 @CustomLog
@@ -107,11 +110,8 @@ public class PlayerHandoff {
             return CompletableFuture.completedFuture(null);
         }
 
-        return store.save(capture.capture(player, ownership.nextVersion()))
-                .exceptionally(failure -> {
-                    log.error("Could not save {} on the way out, releasing them with their last save", player.getName(), failure).submit();
-                    return false;
-                })
+        final PlayerState state = capture.capture(player, ownership.nextVersion());
+        return saveOnTheWayOut(state, player.getName(), System.currentTimeMillis() + Duration.ofMinutes(1).toMillis())
                 .thenCompose(saved -> {
                     if (!saved) {
                         log.warn("The save of {} on the way out was stale and was not kept", player.getName()).submit();
@@ -123,6 +123,26 @@ public class PlayerHandoff {
                         log.warn("{} was no longer owned by this server when released", player.getName()).submit();
                     }
                 });
+    }
+
+    /** Saves until the store answers, so a store outage delays the release instead of losing the state. */
+    private @NotNull CompletableFuture<Boolean> saveOnTheWayOut(@NotNull PlayerState state, @NotNull String name,
+                                                                long giveUpAt) {
+        return store.save(state)
+                .handle((saved, failure) -> {
+                    if (failure == null) {
+                        return CompletableFuture.completedFuture(saved);
+                    }
+                    if (System.currentTimeMillis() > giveUpAt) {
+                        log.error("Could not save {} on the way out, releasing them with their last save", name, failure).submit();
+                        return CompletableFuture.completedFuture(false);
+                    }
+                    log.warn("Could not save {} on the way out, trying again", name).submit();
+                    // The same version again, so a save that did land the first time is not written twice
+                    return CompletableFuture.supplyAsync(() -> null, CompletableFuture.delayedExecutor(1, TimeUnit.SECONDS))
+                            .thenCompose(unused -> saveOnTheWayOut(state, name, giveUpAt));
+                })
+                .thenCompose(next -> next);
     }
 
     /** Releases players that were claimed but never joined within {@code grace}, without saving them. */

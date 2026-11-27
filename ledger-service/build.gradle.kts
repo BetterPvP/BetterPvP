@@ -17,9 +17,9 @@ dependencies {
     annotationProcessor(libs.lombok)
 
     testImplementation(libs.junit.jupiter)
-    testImplementation("org.testcontainers:testcontainers:1.21.3")
-    testImplementation("org.testcontainers:postgresql:1.21.3")
-    testImplementation("org.testcontainers:junit-jupiter:1.21.3")
+    testImplementation(libs.testcontainers)
+    testImplementation("org.testcontainers:testcontainers-postgresql:2.0.5")
+    testImplementation("org.testcontainers:testcontainers-junit-jupiter:2.0.5")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 

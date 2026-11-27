@@ -10,6 +10,7 @@ import me.mykindos.betterpvp.clans.clans.ClanProperty;
 import me.mykindos.betterpvp.clans.clans.insurance.Insurance;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageEndEvent;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageStartEvent;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.client.offlinemessages.OfflineMessage;
 import me.mykindos.betterpvp.core.client.offlinemessages.OfflineMessagesHandler;
 import me.mykindos.betterpvp.core.combat.damagelog.DamageLog;
@@ -65,14 +66,16 @@ public class PillageListener implements Listener {
     private final ClanManager clanManager;
     private final DamageLogManager damageLogManager;
     private final OfflineMessagesHandler offlineMessagesHandler;
+    private final ClanWriter writer;
 
     @Inject
-    public PillageListener(Clans clans, ClanManager clanManager, PillageHandler pillageHandler, DamageLogManager damageLogManager, OfflineMessagesHandler offlineMessagesHandler) {
+    public PillageListener(Clans clans, ClanManager clanManager, PillageHandler pillageHandler, DamageLogManager damageLogManager, OfflineMessagesHandler offlineMessagesHandler, ClanWriter writer) {
         this.clans = clans;
         this.clanManager = clanManager;
         this.pillageHandler = pillageHandler;
         this.damageLogManager = damageLogManager;
         this.offlineMessagesHandler = offlineMessagesHandler;
+        this.writer = writer;
     }
 
     @UpdateEvent(delay = 5000)
@@ -103,8 +106,7 @@ public class PillageListener implements Listener {
 
         pillager.getEnemies().remove(pillagerEnemy);
         pillaged.getEnemies().remove(pillagedEnemy);
-        clanManager.getRepository().deleteClanEnemy(pillager, pillagerEnemy);
-        clanManager.getRepository().deleteClanEnemy(pillaged, pillagedEnemy);
+        writer.removeEnemy(pillager, pillaged);
 
         int amountEarnedFromBank = (int) (pillaged.getBalance() * 0.50);
         if(amountEarnedFromBank > 0) {

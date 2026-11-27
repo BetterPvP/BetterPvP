@@ -17,6 +17,8 @@ include(":orchestration-service")
 include(":network-protocol")
 include(":sessions")
 include(":sessions-service")
+include(":clans-protocol")
+include(":clans-service")
 include(":proxy")
 
 if (File("./private/").exists()) {
@@ -147,6 +149,8 @@ dependencyResolutionManagement {
             // Library - NATS
             library("jnats", "io.nats", "jnats").version("2.27.0")
             library("testcontainers", "org.testcontainers", "testcontainers").version("2.0.5")
+            library("testcontainers-postgresql", "org.testcontainers", "testcontainers-postgresql").version("2.0.5")
+            library("testcontainers-junit", "org.testcontainers", "testcontainers-junit-jupiter").version("2.0.5")
 
             // Bundled Libraries
             bundle("test", listOf("junit-jupiter", "mockbukkit", "paper-api-test"))

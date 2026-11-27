@@ -9,10 +9,15 @@ package me.mykindos.betterpvp.network.protocol;
  * <p>
  * An owned site is held by a lease in {@link DirectoryKeys#leases}, keyed by {@link DirectoryKeys#site}, so the same
  * site never opens on two servers. A site that is not owned gets a server for one new instance and no lease.
+ * <p>
+ * A request on topic {@link #RELEASE} carries {@link #SITE}, {@link #OWNER} and {@link #SERVER}, sent by a host that is
+ * draining once it has saved the site. The lease is dropped if it still names that server, and the server is given
+ * nothing new while it drains. Placement answers with outcome {@link #RELEASED}.
  */
 public final class PlacementMessages {
 
     public static final String PLACE = "placement.place";
+    public static final String RELEASE = "placement.release";
 
     public static final String SITE = "site";
     public static final String OWNER = "owner";
@@ -29,6 +34,8 @@ public final class PlacementMessages {
     public static final String PLACED = "placed";
     /** No server had room, so a new one was allocated. */
     public static final String ALLOCATED = "allocated";
+    /** The lease was dropped, or named another server and was left alone. */
+    public static final String RELEASED = "released";
     /** Nowhere could take it. */
     public static final String UNAVAILABLE = "unavailable";
 

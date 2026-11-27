@@ -10,3 +10,15 @@ channel = "production"
 database_url = "jdbc:postgresql://127.0.0.1:5432/betterpvp"
 database_user = ""
 database_password = ""
+
+# The distributed network. Joins are routed through Placement, accounts are bound to one proxy at a time, and every
+# proxy announces who is online. Off for a single server behind one proxy.
+[network]
+enabled = false
+nats_url = "nats://127.0.0.1:4222"
+nats_token = ""
+prefix = "bpvp"
+# Blank uses the pod's hostname, which is unique per proxy
+proxy_name = ""
+# The site Placement is asked for when a player joins
+hub_site = "hub"

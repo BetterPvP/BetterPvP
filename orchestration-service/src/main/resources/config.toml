@@ -59,8 +59,13 @@ namespace = ""
 # The role each site runs on. Sites not listed run on default_role.
 [placement.sites]
 camp = "camp"
+hub = "hub"
 
 # The Agones fleet and counter behind each role
 [placement.fleets.camp]
 fleet = "camp"
 counter = "camp-slots"
+
+[placement.fleets.hub]
+fleet = "hub"
+counter = "players"

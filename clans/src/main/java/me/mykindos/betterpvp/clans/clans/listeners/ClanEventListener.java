@@ -31,6 +31,7 @@ import me.mykindos.betterpvp.clans.clans.events.MemberDemoteEvent;
 import me.mykindos.betterpvp.clans.clans.events.MemberJoinClanEvent;
 import me.mykindos.betterpvp.clans.clans.events.MemberLeaveClanEvent;
 import me.mykindos.betterpvp.clans.clans.events.MemberPromoteEvent;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.Rank;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
@@ -98,6 +99,7 @@ public class ClanEventListener extends ClanListener {
     private final CommandManager commandManager;
     private final CooldownManager cooldownManager;
     private final OfflineMessagesHandler offlineMessagesHandler;
+    private final ClanWriter writer;
 
     @Inject
     @Config(path = "clans.members.max", defaultValue = "8")
@@ -109,7 +111,8 @@ public class ClanEventListener extends ClanListener {
 
     @Inject
     public ClanEventListener(final Clans clans, final ClanManager clanManager, final ClientManager clientManager, final InviteHandler inviteHandler,
-                             final WorldBlockHandler blockHandler, final CommandManager commandManager, final CooldownManager cooldownManager, OfflineMessagesHandler offlineMessagesHandler) {
+                             final WorldBlockHandler blockHandler, final CommandManager commandManager, final CooldownManager cooldownManager, OfflineMessagesHandler offlineMessagesHandler,
+                             final ClanWriter writer) {
         super(clanManager, clientManager);
         this.clans = clans;
         this.inviteHandler = inviteHandler;
@@ -117,6 +120,7 @@ public class ClanEventListener extends ClanListener {
         this.commandManager = commandManager;
         this.cooldownManager = cooldownManager;
         this.offlineMessagesHandler = offlineMessagesHandler;
+        this.writer = writer;
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
@@ -283,7 +287,7 @@ public class ClanEventListener extends ClanListener {
         player.setMetadata("clan", new FixedMetadataValue(this.clans, clan.getId()));
 
         this.clanManager.addObject(clan.getId(), clan);
-        this.clanManager.getRepository().save(clan);
+        this.writer.create(clan);
         this.clanManager.getLeaderboard().forceUpdate();
 
         final var defaultValues = this.clans.getInjector().getInstance(ClanDefaultValues.class);
@@ -403,7 +407,7 @@ public class ClanEventListener extends ClanListener {
         clan.getEnemies().clear();
         clan.getAlliances().clear();
 
-        this.clanManager.getRepository().delete(clan);
+        this.writer.disband(clan);
         this.clanManager.getObjects().remove(clan.getId());
         this.clanManager.getLeaderboard().forceUpdate();
 
@@ -522,7 +526,7 @@ public class ClanEventListener extends ClanListener {
         clan.getMembers().add(member);
         player.setMetadata("clan", new FixedMetadataValue(this.clans, clan.getId()));
 
-        this.clanManager.getRepository().saveClanMember(clan, member);
+        this.writer.addMember(clan, member);
 
 
         this.inviteHandler.removeInvite(clan, gamer, "Invite");
@@ -561,7 +565,7 @@ public class ClanEventListener extends ClanListener {
         if (memberOptional.isPresent()) {
             final ClanMember clanMember = memberOptional.get();
 
-            this.clanManager.getRepository().deleteClanMember(clan, clanMember);
+            this.writer.removeMember(clan, clanMember);
             clan.getMembers().remove(clanMember);
 
             UtilMessage.message(player, "clans.prefix", "clans.command.clan.leave.success-self", Component.text(clan.getName(), NamedTextColor.YELLOW));
@@ -599,7 +603,7 @@ public class ClanEventListener extends ClanListener {
         if (memberOptional.isPresent()) {
             final ClanMember clanMember = memberOptional.get();
 
-            this.clanManager.getRepository().deleteClanMember(clan, clanMember);
+            this.writer.removeMember(clan, clanMember);
             clan.getMembers().remove(clanMember);
 
             UtilMessage.message(player, "clans.prefix", "clans.command.clan.kick.success-self", Component.text(target.getName(), NamedTextColor.YELLOW));
@@ -690,8 +694,7 @@ public class ClanEventListener extends ClanListener {
             }
         });
 
-        this.clanManager.getRepository().saveClanAlliance(clan, clanAlliance);
-        this.clanManager.getRepository().saveClanAlliance(target, targetAlliance);
+        this.writer.ally(clan, target);
 
         log.info("{} ({}) of {} ({}) accepted alliance with {} ({})", event.getPlayer().getName(), event.getPlayer().getUniqueId(),
                         clan.getName(), clan.getId(), target.getName(), target.getId()).setAction("CLAN_ALLIANCE_ACCEPT")
@@ -763,8 +766,7 @@ public class ClanEventListener extends ClanListener {
             }
         });
 
-        this.clanManager.getRepository().saveTrust(clan, clanAlliance);
-        this.clanManager.getRepository().saveTrust(target, targetAlliance);
+        this.writer.setTrust(clan, target, true);
 
         log.info("{} ({}) of {} ({}) accepted trust with {} ({})", event.getPlayer().getName(), event.getPlayer().getUniqueId(),
                         clan.getName(), clan.getId(), target.getName(), target.getId()).setAction("CLAN_TRUST_ACCEPT")
@@ -798,8 +800,7 @@ public class ClanEventListener extends ClanListener {
             }
         });
 
-        this.clanManager.getRepository().saveTrust(clan, clanAlliance);
-        this.clanManager.getRepository().saveTrust(target, targetAlliance);
+        this.writer.setTrust(clan, target, false);
 
         log.info("{} ({}) of {} ({}) removed trust with {} ({})", event.getPlayer().getName(), event.getPlayer().getUniqueId(),
                         clan.getName(), clan.getId(), target.getName(), target.getId()).setAction("CLAN_TRUST_REMOVE")
@@ -891,8 +892,7 @@ public class ClanEventListener extends ClanListener {
     private void removeAlliance(final Clan clan, final Clan target) {
         final ClanAlliance clanAlliance = clan.getAlliance(target).orElseThrow();
         final ClanAlliance targetAlliance = target.getAlliance(clan).orElseThrow();
-        this.clanManager.getRepository().deleteClanAlliance(clan, clanAlliance);
-        this.clanManager.getRepository().deleteClanAlliance(target, targetAlliance);
+        this.writer.removeAlliance(clan, target);
         clan.getAlliances().remove(clanAlliance);
         target.getAlliances().remove(targetAlliance);
     }
@@ -900,8 +900,7 @@ public class ClanEventListener extends ClanListener {
     private void removeEnemy(final Clan clan, final Clan target) {
         final ClanEnemy clanEnemy = clan.getEnemy(target).orElseThrow();
         final ClanEnemy targetEnemy = target.getEnemy(clan).orElseThrow();
-        this.clanManager.getRepository().deleteClanEnemy(clan, clanEnemy);
-        this.clanManager.getRepository().deleteClanEnemy(target, targetEnemy);
+        this.writer.removeEnemy(clan, target);
         clan.getEnemies().remove(clanEnemy);
         target.getEnemies().remove(targetEnemy);
     }
@@ -932,8 +931,7 @@ public class ClanEventListener extends ClanListener {
         clan.getEnemies().add(clanEnemy);
         target.getEnemies().add(targetEnemy);
 
-        this.clanManager.getRepository().saveClanEnemy(clan, clanEnemy);
-        this.clanManager.getRepository().saveClanEnemy(target, targetEnemy);
+        this.writer.enemy(clan, target);
 
         clan.getMembers().forEach(member -> {
             Player p = Bukkit.getPlayer(member.getUuid());
@@ -1041,7 +1039,7 @@ public class ClanEventListener extends ClanListener {
         final ClanMember.MemberRank rank = member.getRank();
 
         member.setRank(ClanMember.MemberRank.getRankByPrivilege(Math.min(ClanMember.MemberRank.LEADER.getPrivilege(), member.getRank().getPrivilege() + 1)));
-        this.clanManager.getRepository().updateClanMemberRank(clan, member);
+        this.writer.promote(clan, member);
 
         this.clientManager.search().offline(member.getUuid()).thenAcceptAsync(result -> {
             result.ifPresent(clientFound -> {
@@ -1077,7 +1075,7 @@ public class ClanEventListener extends ClanListener {
         final ClanMember.MemberRank rank = member.getRank();
 
         member.setRank(ClanMember.MemberRank.getRankByPrivilege(Math.max(1, member.getRank().getPrivilege() - 1)));
-        this.clanManager.getRepository().updateClanMemberRank(clan, member);
+        this.writer.demote(clan, member);
 
         this.clientManager.search().offline(member.getUuid()).thenAcceptAsync(result -> {
             result.ifPresent(clientFound -> {

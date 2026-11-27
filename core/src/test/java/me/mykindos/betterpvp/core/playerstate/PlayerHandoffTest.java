@@ -43,7 +43,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class PlayerHandoffTest {
 
-    private static final Duration LEASE = Duration.ofSeconds(1);
     private static final AtomicInteger NETWORKS = new AtomicInteger();
 
     private static GenericContainer<?> nats;
@@ -83,7 +82,7 @@ class PlayerHandoffTest {
 
         final Connection serviceConnection = connect();
         endpoint = new SessionEndpoint(serviceConnection, prefix,
-                new LeaseBook(LEASE.toMillis(), LEASE.toMillis(), System::currentTimeMillis),
+                new LeaseBook(1000, 1000, System::currentTimeMillis),
                 Executors.newScheduledThreadPool(2), 10_000);
         endpoint.start();
         serviceConnection.flush(Duration.ofSeconds(2));

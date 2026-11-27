@@ -32,7 +32,7 @@ public abstract class PlayerManager<T extends Unique> {
 
     /**
      * Unload an entity from storage.
-     * This won't remove the entity from redis or sql, it will just remove it from the cache.
+     * This won't remove the entity from sql, it will just remove it from the cache.
      * @param entity The entity to unload.
      */
     public abstract void unload(T entity);

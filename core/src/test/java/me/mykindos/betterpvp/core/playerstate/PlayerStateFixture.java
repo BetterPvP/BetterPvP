@@ -46,7 +46,7 @@ import static org.mockito.Mockito.when;
  * by reference.
  */
 @Getter
-final class PlayerStateFixture {
+public final class PlayerStateFixture {
 
     private static final NamespacedKey BLADE = new NamespacedKey("test", "blade");
 
@@ -59,6 +59,11 @@ final class PlayerStateFixture {
     private final PlayerStateCapture capture;
 
     PlayerStateFixture() {
+        this(dataSource);
+    }
+
+    /** Over a database that already has the player state table, see {@link #migrate(DataSource)}. */
+    public PlayerStateFixture(@NotNull DataSource source) {
         final ComponentSerializationRegistry serializers = new ComponentSerializationRegistry();
         serializers.register(new UUIDPropertySerializer());
         serializers.register(new DurabilityComponentSerializer());
@@ -78,7 +83,7 @@ final class PlayerStateFixture {
 
             @Override
             public DataSource getDataSource() {
-                return dataSource;
+                return source;
             }
         };
         final Database database = mock(Database.class);
@@ -101,8 +106,12 @@ final class PlayerStateFixture {
         source.setUser("postgres");
         source.setPassword("test");
         dataSource = source;
+        migrate(dataSource);
+    }
+
+    public static void migrate(@NotNull DataSource source) {
         Flyway.configure()
-                .dataSource(dataSource)
+                .dataSource(source)
                 .locations("classpath:core-migrations/postgres/playerstate")
                 .load()
                 .migrate();
@@ -115,7 +124,7 @@ final class PlayerStateFixture {
     }
 
     /** A custom item with a fresh uuid, the given durability damage and nested persistent data of several types. */
-    ItemStack blade(int damage) {
+    public ItemStack blade(int damage) {
         final DurabilityComponent durability = new DurabilityComponent(100);
         durability.setDamage(damage);
         final ItemInstance instance = itemFactory.create(itemFactory.getItemRegistry().getItem(BLADE))
@@ -133,7 +142,7 @@ final class PlayerStateFixture {
         return stack;
     }
 
-    void assertSameItem(@Nullable ItemStack expected, @Nullable ItemStack actual) {
+    public void assertSameItem(@Nullable ItemStack expected, @Nullable ItemStack actual) {
         assertEquals(expected == null, actual == null);
         if (expected == null) {
             return;
@@ -146,7 +155,7 @@ final class PlayerStateFixture {
         assertEquals(damage(before), damage(after));
     }
 
-    @Nullable UUID uuid(@NotNull ItemStack stack) {
+    public @Nullable UUID uuid(@NotNull ItemStack stack) {
         return uuid(itemFactory.fromItemStack(stack).orElseThrow());
     }
 

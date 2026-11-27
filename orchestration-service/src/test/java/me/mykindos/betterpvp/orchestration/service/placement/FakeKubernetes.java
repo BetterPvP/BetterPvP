@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * The two Agones calls Placement makes, answered from memory. Allocating turns the next Ready server into an
+ * The Agones calls Placement makes, answered from memory. Allocating turns the next Ready server into an
  * Allocated one, the way Agones does.
  */
 class FakeKubernetes implements AutoCloseable {
@@ -25,11 +25,14 @@ class FakeKubernetes implements AutoCloseable {
     final List<String> allocationBodies = new CopyOnWriteArrayList<>();
     final List<String> listQueries = new CopyOnWriteArrayList<>();
     final List<String> authorizations = new CopyOnWriteArrayList<>();
+    /** Each fleet patch as {@code <fleet> <body>}. */
+    final List<String> fleetPatches = new CopyOnWriteArrayList<>();
 
     FakeKubernetes() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/apis/agones.dev/v1/namespaces/games/gameservers", this::list);
         server.createContext("/apis/allocation.agones.dev/v1/namespaces/games/gameserverallocations", this::allocate);
+        server.createContext("/apis/agones.dev/v1/namespaces/games/fleets/", this::patchFleet);
         server.start();
     }
 
@@ -67,6 +70,13 @@ class FakeKubernetes implements AutoCloseable {
             }
         }
         respond(exchange, Map.of("status", Map.of("state", "UnAllocated")));
+    }
+
+    private void patchFleet(HttpExchange exchange) throws IOException {
+        final String path = exchange.getRequestURI().getPath();
+        fleetPatches.add(path.substring(path.lastIndexOf('/') + 1) + " "
+                + new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+        respond(exchange, Map.of());
     }
 
     private void respond(HttpExchange exchange, Object body) throws IOException {

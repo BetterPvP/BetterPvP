@@ -49,7 +49,8 @@ public class PlacementConfig {
                 final TomlTable fleet = fleetTable.getTable(role);
                 if (fleet != null) {
                     fleets.put(role, new AgonesServerPool.Fleet(fleet.getString("fleet", () -> role),
-                            fleet.getString("counter", () -> role + "-slots")));
+                            fleet.getString("counter", () -> role + "-slots"),
+                            fleet.getBoolean("scale_from_zero", () -> false)));
                 }
             }
         }

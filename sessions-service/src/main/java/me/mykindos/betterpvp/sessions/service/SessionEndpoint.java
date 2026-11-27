@@ -45,7 +45,7 @@ public class SessionEndpoint implements AutoCloseable {
 
     public void start() {
         dispatcher = connection.createDispatcher(message -> workers.execute(() -> handle(message)));
-        // One queue group, so each request reaches one instance however many run
+        // Leases live in this instance's memory, so the network runs exactly one instance
         dispatcher.subscribe(Subjects.bus(prefix, SessionProtocol.CLAIM), ORIGIN);
         dispatcher.subscribe(Subjects.bus(prefix, SessionProtocol.RELEASE), ORIGIN);
         dispatcher.subscribe(Subjects.bus(prefix, SessionProtocol.HEARTBEAT), ORIGIN);

@@ -67,6 +67,30 @@ class AgonesServerPoolTest {
     }
 
     @Test
+    @DisplayName("a fleet that scales from zero starts a server when none is Ready, and goes back to zero once it is taken")
+    void scalesFromZero() throws IOException {
+        final AgonesServerPool events = new AgonesServerPool(HttpClient.newHttpClient(), kubernetes.url(), "games",
+                () -> "secret-token", Map.of("event", new AgonesServerPool.Fleet("event", "players", true)));
+
+        assertTrue(events.allocate("event").isEmpty());
+        assertEquals(List.of("event {\"spec\":{\"replicas\":1}}"), kubernetes.fleetPatches);
+
+        kubernetes.addServer("event-a", "Ready", 0, 200);
+        assertEquals(Optional.of("event-a"), events.allocate("event"));
+        assertEquals(List.of("event {\"spec\":{\"replicas\":1}}", "event {\"spec\":{\"replicas\":0}}"),
+                kubernetes.fleetPatches);
+    }
+
+    @Test
+    @DisplayName("an ordinary fleet is never scaled by Placement")
+    void ordinaryFleetsAreLeftAlone() throws IOException {
+        pool.allocate("camp");
+        kubernetes.addServer("camp-c", "Ready", 0, 10);
+        pool.allocate("camp");
+        assertTrue(kubernetes.fleetPatches.isEmpty());
+    }
+
+    @Test
     @DisplayName("a role with no fleet configured is an error, not an empty pool")
     void unknownRole() {
         assertThrows(IOException.class, () -> pool.servers("dungeon"));

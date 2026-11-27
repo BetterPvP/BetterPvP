@@ -9,6 +9,8 @@ import io.nats.client.Options;
 import me.mykindos.betterpvp.network.protocol.PlayerRoster;
 import me.mykindos.betterpvp.network.protocol.PresenceMessages;
 import me.mykindos.betterpvp.proxy.ProxyConfig;
+import me.mykindos.betterpvp.sessions.ProxySessions;
+import me.mykindos.betterpvp.sessions.SessionCalls;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -51,7 +53,8 @@ public final class ProxyNetwork {
                 Duration.ofSeconds(PresenceMessages.ROSTER_INTERVAL_SECONDS * 3L), System::currentTimeMillis));
         presence.start();
 
-        final NetworkLogins logins = new NetworkLogins(new OpenSessions(), presence, logger);
+        final NetworkLogins logins = new NetworkLogins(new ServiceSessions(new ProxySessions(
+                new SessionCalls(connection, config.networkPrefix(), config.proxyName()))), presence, logger);
         final ProxyNetwork network = new ProxyNetwork(connection, bus, logins);
         proxy.getEventManager().register(plugin, new NetworkListener(proxy, logins,
                 new HubRouter(bus, config.hubSite(), logger), logger));

@@ -79,4 +79,35 @@ class LeaseBookTest {
         now.addAndGet(1_000);
         assertTrue(book.login(player, "proxy-2"));
     }
+
+    @Test
+    void hearingNobodyForLongerThanALeaseKeepsEveryLease() {
+        book.claim(player, "A");
+        now.addAndGet(30_000);
+        assertFalse(book.claim(player, "B").isGranted(), "a silence the service could not see past ended a lease");
+
+        now.addAndGet(9_000);
+        book.heartbeat("A");
+        now.addAndGet(9_000);
+        assertFalse(book.claim(player, "B").isGranted());
+    }
+
+    @Test
+    void anOwnerThatStaysSilentAfterAnOutageStillLosesThePlayer() {
+        book.claim(player, "A");
+        now.addAndGet(30_000);
+        assertFalse(book.claim(player, "B").isGranted());
+        for (int second = 0; second < 10; second++) {
+            now.addAndGet(1_000);
+            book.heartbeat("C");
+        }
+        assertTrue(book.claim(player, "B").isGranted());
+    }
+
+    @Test
+    void hearingNobodyForLongerThanTheProxyTimeoutKeepsEveryAccountWhereItIs() {
+        assertTrue(book.login(player, "proxy-1"));
+        now.addAndGet(30_000);
+        assertFalse(book.login(player, "proxy-2"));
+    }
 }

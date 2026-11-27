@@ -31,7 +31,6 @@ dependencies {
     api(project(":structure-format"))
     implementation(libs.reflections)
     implementation(libs.hikari.cp)
-    implementation(libs.jedis)
     implementation(project(":network-protocol"))
     implementation(project(":sessions"))
     // BouncyCastle is only for NKey and JWT sign-in, which the network does not use
@@ -152,4 +151,38 @@ publishing {
             artifact(tasks.getByName("jar"))
         }
     }
+}
+
+// Cross-service tests against real NATS, Postgres and network services, run by networkTest instead of test
+val networkTest: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+    runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+}
+configurations.named(networkTest.implementationConfigurationName) {
+    extendsFrom(configurations.testImplementation.get())
+}
+configurations.named(networkTest.runtimeOnlyConfigurationName) {
+    extendsFrom(configurations.testRuntimeOnly.get())
+}
+configurations.named(networkTest.compileOnlyConfigurationName) {
+    extendsFrom(configurations.testCompileOnly.get(), configurations.compileOnly.get())
+}
+configurations.named(networkTest.annotationProcessorConfigurationName) {
+    extendsFrom(configurations.testAnnotationProcessor.get())
+}
+
+dependencies {
+    "networkTestImplementation"(project(":orchestration-service"))
+    "networkTestImplementation"(project(":ledger-service"))
+    "networkTestImplementation"(project(":clans-service"))
+    "networkTestImplementation"(project(":clans-protocol"))
+}
+
+tasks.register<Test>("networkTest") {
+    description = "Runs the cross-service tests. Needs Docker."
+    group = "verification"
+    testClassesDirs = networkTest.output.classesDirs
+    classpath = networkTest.runtimeClasspath
+    useJUnitPlatform()
+    shouldRunAfter(tasks.test)
 }

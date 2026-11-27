@@ -115,7 +115,8 @@ sed -e "s|__IMAGE__|$IMAGE|" -e "s|__PULL_POLICY__|$pull_policy|" -e "s|__SERVER
   manifests/servers.yaml | kubectl apply -f -
 
 # Shulker keeps each <role>-template Fleet at no replicas, because it resets replicas whenever it reconciles. The role's
-# own Fleet copies that template and adds the counters core reports, loose health and a stop grace.
+# own Fleet copies that template and adds the counters core reports, loose health, a stop grace and a console
+# (kubectl attach -i) for admin commands.
 for role in $ROLES; do
   f=$(jq -c --arg r "$role" '.[$r] // empty' manifests/fleets.json)
   [[ -n $f ]] || { echo "unknown role $role in ROLES" >&2; exit 1; }
@@ -128,7 +129,8 @@ for role in $ROLES; do
       | .template.metadata.labels["betterpvp.net/role"] = $role
       | .template.spec.counters = ($f.counters | map_values({count: 0, capacity: .}))
       | .template.spec.health = {disabled: false, initialDelaySeconds: 180, periodSeconds: 15, failureThreshold: 12}
-      | .template.spec.template.spec.terminationGracePeriodSeconds = 45)
+      | .template.spec.template.spec.terminationGracePeriodSeconds = 45
+      | .template.spec.template.spec.containers |= map(if .name == "minecraft-server" then .stdin = true else . end))
   }' | kubectl apply -f -
   if jq -e '.buffer' <<<"$f" >/dev/null; then
     # BUFFER_MAX caps every role's servers, for a machine that cannot hold the spares.

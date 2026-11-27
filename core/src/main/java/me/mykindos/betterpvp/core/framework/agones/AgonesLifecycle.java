@@ -39,6 +39,7 @@ public class AgonesLifecycle implements Listener {
     private int campCapacity = -1;
     private long publishedCount = -1;
     private long publishedCapacity = -1;
+    private volatile boolean resend;
 
     @Inject
     public AgonesLifecycle(GameServerSdk sdk, RoleGate roleGate) {
@@ -68,7 +69,6 @@ public class AgonesLifecycle implements Listener {
         publishCapacity();
     }
 
-    // Pinged from the main thread so a stalled server stops reporting healthy.
     @UpdateEvent(delay = 2000)
     public void heartbeat() {
         if (!ready) {
@@ -98,13 +98,18 @@ public class AgonesLifecycle implements Listener {
         final boolean camp = roleGate.getRole() == ServerRole.CAMP;
         final long count = camp ? campsHosted : Bukkit.getOnlinePlayers().size();
         final long capacity = camp ? (campCapacity < 0 ? campSlots : campCapacity) : Bukkit.getMaxPlayers();
-        if (count == publishedCount && capacity == publishedCapacity) {
+        if (!resend && count == publishedCount && capacity == publishedCapacity) {
             return;
         }
 
         publishedCount = count;
         publishedCapacity = capacity;
-        sdk.setCounter(camp ? "camp-slots" : "players", count, capacity);
+        resend = false;
+        sdk.setCounter(camp ? "camp-slots" : "players", count, capacity).whenComplete((sent, failure) -> {
+            if (failure != null || !Boolean.TRUE.equals(sent)) {
+                resend = true;
+            }
+        });
     }
 
 }

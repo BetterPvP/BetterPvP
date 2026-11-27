@@ -52,7 +52,7 @@ Under Agones (`AGONES_SDK_HTTP_PORT` is set) the entrypoint also reports health 
 | `SERVER_ARGS` | | More Paper arguments |
 
 ```bash
-BPVP_CONFIG_SET='plugins/Core/config.yml .core.redis.enabled false
+BPVP_CONFIG_SET='plugins/Core/config.yml .core.network.bus nats
 plugins/Clans/config.yml .clans.example 5'
 ```
 

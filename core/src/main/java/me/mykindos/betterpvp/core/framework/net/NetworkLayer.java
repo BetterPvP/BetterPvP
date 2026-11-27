@@ -14,7 +14,7 @@ import java.util.Optional;
  * Resolves each network seam once, from config, and holds what it resolved.
  * <p>
  * Every seam is chosen the same way: a name from config, looked up in {@link NetworkTransports}. The names that ship
- * are {@code proxy}, {@code nats}, {@code redis}, {@code local}, {@code service} and {@code directory}, and anything
+ * are {@code proxy}, {@code nats}, {@code local}, {@code service} and {@code directory}, and anything
  * another network registers stands beside them on equal terms. This is the only class that chooses, so joining a
  * different network is a registration and a config
  * value, never an edit to whatever is using a seam.
@@ -25,14 +25,10 @@ public class NetworkLayer {
 
     public static final String PROXY = "proxy";
     public static final String NATS = "nats";
-    public static final String REDIS = "redis";
     public static final String LOCAL = "local";
-    public static final String SERVICE = "service";
-    public static final String DIRECTORY = "directory";
 
     private final Core core;
     private final NetworkTransports transports;
-    private final RedisConnection redis;
     private final NatsConnection nats;
 
     private volatile MessageBus bus;
@@ -41,30 +37,26 @@ public class NetworkLayer {
     private volatile SiteHosts hosts;
 
     @Inject
-    public NetworkLayer(@NotNull Core core, @NotNull NetworkTransports transports, @NotNull RedisConnection redis,
-                        @NotNull NatsConnection nats,
+    public NetworkLayer(@NotNull Core core, @NotNull NetworkTransports transports, @NotNull NatsConnection nats,
                         @NotNull Provider<VelocityMessageBus> proxyBus,
                         @NotNull Provider<LocalSiteDirectory> localDirectory,
                         @NotNull Provider<ProxyPlayerTransfer> proxyTransfer) {
         this.core = core;
         this.transports = transports;
-        this.redis = redis;
         this.nats = nats;
 
         // What ships, registered the same way anything else would be. A factory answering null means that
-        // implementation cannot run here, which is how NATS and Redis withdraw when they are not configured.
+        // implementation cannot run here, which is how NATS withdraws when it is not configured.
         transports.registerBus(PROXY, proxyBus::get);
         transports.registerBus(NATS, () -> nats.isUsable() ? startedNatsBus() : null);
-        transports.registerBus(REDIS, () -> redis.isUsable() ? startedRedisBus() : null);
         transports.registerDirectory(LOCAL, localDirectory::get);
         transports.registerDirectory(NATS, () -> nats.isUsable()
                 ? NatsSiteDirectory.open(nats.getConnection(), nats.prefix(), nats.replicas(), NetworkLayer::serverName)
                 : null);
-        transports.registerDirectory(REDIS, () -> redis.isUsable() ? new RedisSiteDirectory(core, redis.getPool()) : null);
         transports.registerTransfer(PROXY, proxyTransfer::get);
         // Placement runs beside NATS, so a network without NATS has no service to ask.
-        transports.registerHosts(SERVICE, () -> nats.isUsable() ? new PlacementSiteHosts(bus()) : null);
-        transports.registerHosts(DIRECTORY, () -> new DirectorySiteHosts(directory()));
+        transports.registerHosts("service", () -> nats.isUsable() ? new PlacementSiteHosts(bus()) : null);
+        transports.registerHosts("directory", () -> new DirectorySiteHosts(directory()));
     }
 
     /** How servers talk to each other. */
@@ -72,7 +64,7 @@ public class NetworkLayer {
         if (bus == null) {
             synchronized (this) {
                 if (bus == null) {
-                    bus = choose("bus", transports::bus, List.of(NATS, REDIS, PROXY), "message bus");
+                    bus = choose("bus", transports::bus, List.of(NATS, PROXY), "message bus");
                 }
             }
         }
@@ -84,7 +76,7 @@ public class NetworkLayer {
         if (directory == null) {
             synchronized (this) {
                 if (directory == null) {
-                    directory = choose("directory", transports::directory, List.of(NATS, REDIS, LOCAL), "site directory");
+                    directory = choose("directory", transports::directory, List.of(NATS, LOCAL), "site directory");
                 }
             }
         }
@@ -108,7 +100,7 @@ public class NetworkLayer {
         if (hosts == null) {
             synchronized (this) {
                 if (hosts == null) {
-                    hosts = choose("placement", transports::hosts, List.of(SERVICE, DIRECTORY), "site host chooser");
+                    hosts = choose("placement", transports::hosts, List.of("service", "directory"), "site host chooser");
                 }
             }
         }
@@ -122,7 +114,6 @@ public class NetworkLayer {
         if (directory != null) {
             directory.close();
         }
-        redis.close();
         nats.close();
     }
 
@@ -144,7 +135,6 @@ public class NetworkLayer {
                 return chosen.get();
             }
 
-            // Said out loud, because falling back quietly is how a network runs a season on the wrong one.
             log.warn("No {} named '{}' could be used, falling back", describedAs, named).submit();
         }
 
@@ -157,12 +147,6 @@ public class NetworkLayer {
         }
 
         throw new IllegalStateException("No " + describedAs + " is available, which should be impossible");
-    }
-
-    private @NotNull MessageBus startedRedisBus() {
-        final RedisMessageBus redisBus = new RedisMessageBus(core, redis.getPool(), redis.channel());
-        redisBus.start();
-        return redisBus;
     }
 
     private @NotNull MessageBus startedNatsBus() {

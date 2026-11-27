@@ -27,6 +27,8 @@ import me.mykindos.betterpvp.core.framework.server.network.NetworkPlayerCountSer
 import me.mykindos.betterpvp.core.framework.server.network.PluginMessagingNetworkPlayerCountService;
 import me.mykindos.betterpvp.core.framework.server.orchestration.CoreOrchestrationGatewayProvider;
 import me.mykindos.betterpvp.core.playerstate.PlayerStateModule;
+import me.mykindos.betterpvp.core.world.excursion.Excursions;
+import me.mykindos.betterpvp.core.world.excursion.NetworkExcursions;
 import me.mykindos.betterpvp.core.world.site.SiteModule;
 import me.mykindos.betterpvp.orchestration.api.OrchestrationGateway;
 
@@ -54,6 +56,7 @@ public class CoreInjectorModule extends AbstractModule {
         bind(CrossServerMessageService.class).to(VelocityCrossServerMessageService.class);
         bind(NetworkPlayerCountService.class).to(PluginMessagingNetworkPlayerCountService.class);
         bind(OrchestrationGateway.class).toProvider(CoreOrchestrationGatewayProvider.class);
+        bind(Excursions.class).to(NetworkExcursions.class);
         bind(GlobalBlockBreakRules.class).to(GlobalBlockBreakRulesImpl.class);
         bind(BlockBreakResolver.class).to(DefaultBlockBreakResolver.class);
         bind(BlockBreakProgressService.class).to(BlockBreakProgressServiceImpl.class);

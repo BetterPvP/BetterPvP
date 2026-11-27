@@ -60,6 +60,8 @@ namespace = ""
 [placement.sites]
 camp = "camp"
 hub = "hub"
+dungeon = "dungeon"
+event = "event"
 
 # The Agones fleet and counter behind each role
 [placement.fleets.camp]
@@ -68,4 +70,12 @@ counter = "camp-slots"
 
 [placement.fleets.hub]
 fleet = "hub"
+counter = "players"
+
+[placement.fleets.dungeon]
+fleet = "dungeon"
+counter = "players"
+
+[placement.fleets.event]
+fleet = "event"
 counter = "players"

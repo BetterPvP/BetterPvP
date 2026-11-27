@@ -76,6 +76,8 @@ counter = "players"
 fleet = "dungeon"
 counter = "players"
 
+# Started when an event server is wanted and none is running, and back at zero otherwise
 [placement.fleets.event]
 fleet = "event"
 counter = "players"
+scale_from_zero = true

@@ -91,6 +91,16 @@ public class NatsLeaseStore implements LeaseStore {
     }
 
     @Override
+    public boolean release(String siteId, long ownerId, Lease current) throws IOException {
+        try {
+            leases.delete(DirectoryKeys.site(siteId, ownerId), current.getRevision());
+            return true;
+        } catch (JetStreamApiException lostRace) {
+            return false;
+        }
+    }
+
+    @Override
     public boolean isAdvertised(String siteId, long ownerId, String server) throws IOException {
         try {
             if (!connection.keyValueManagement().getBucketNames().contains(instancesBucket)) {

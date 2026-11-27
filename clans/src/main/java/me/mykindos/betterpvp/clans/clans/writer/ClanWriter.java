@@ -7,7 +7,7 @@ import org.jetbrains.annotations.NotNull;
 /**
  * The only way a clan's membership, ranks, relations and camp permissions are written.
  * <p>
- * Callers change their in-memory {@link Clan} first, as they always have, then tell the writer. Each method persists
+ * Callers change their in-memory {@link Clan} first, then tell the writer. Each method persists
  * what the caller just did. Nothing here sends messages to players or fires events.
  */
 public interface ClanWriter {

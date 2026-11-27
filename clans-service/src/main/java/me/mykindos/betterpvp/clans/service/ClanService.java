@@ -5,7 +5,6 @@ import io.nats.client.Dispatcher;
 import io.nats.client.Message;
 import me.mykindos.betterpvp.clans.protocol.ClanChange;
 import me.mykindos.betterpvp.clans.protocol.ClanMutation;
-import me.mykindos.betterpvp.clans.protocol.ClanOp;
 import me.mykindos.betterpvp.clans.protocol.ClanReply;
 import me.mykindos.betterpvp.clans.protocol.ClanTopics;
 import org.jetbrains.annotations.NotNull;
@@ -13,7 +12,6 @@ import org.jetbrains.annotations.NotNull;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -25,7 +23,6 @@ import java.util.UUID;
 public class ClanService {
 
     private static final System.Logger LOG = System.getLogger(ClanService.class.getName());
-    private static final Set<ClanOp> RELATIONS = Set.of(ClanOp.ALLY, ClanOp.UNALLY, ClanOp.TRUST, ClanOp.ENEMY, ClanOp.UNENEMY);
 
     private final Connection nats;
     private final ClanStore store;
@@ -84,7 +81,7 @@ public class ClanService {
         }
 
         final long applied = ++sequence;
-        final List<Long> clans = RELATIONS.contains(mutation.getOp()) && mutation.getOther() != null
+        final List<Long> clans = mutation.getOther() != null
                 ? List.of(mutation.getClan(), mutation.getOther())
                 : List.of(mutation.getClan());
         final ClanChange change = new ClanChange(applied, mutation.getOp(), clans);

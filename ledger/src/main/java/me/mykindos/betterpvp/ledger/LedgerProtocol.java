@@ -16,9 +16,9 @@ public final class LedgerProtocol {
     public static final String POST = "ledger.post";
 
     /**
-     * Opens a player account with an opening balance if it has none, and answers a {@link LedgerReceipt} holding its
-     * balance either way. The opening balance is how a server's existing balances move into the ledger the first
-     * time it sees a player.
+     * Opens a player or clan account with an opening balance if it has none, and answers a {@link LedgerReceipt}
+     * holding its balance either way. The opening balance is how a server's existing balances move into the ledger
+     * the first time it sees a player or clan.
      */
     public static final String OPEN = "ledger.open";
 

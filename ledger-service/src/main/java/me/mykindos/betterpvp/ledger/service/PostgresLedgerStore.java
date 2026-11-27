@@ -44,7 +44,7 @@ public class PostgresLedgerStore implements LedgerStore {
 
     @Override
     public @NotNull LedgerReceipt open(@NotNull String account, long opening) {
-        if (!LedgerAccounts.isPlayer(account) || opening < 0) {
+        if (!LedgerAccounts.isHeld(account) || opening < 0) {
             return LedgerReceipt.of(LedgerStatus.INVALID);
         }
         return transaction(connection -> {
@@ -98,7 +98,7 @@ public class PostgresLedgerStore implements LedgerStore {
         if (postingId == null) {
             final boolean sameEntries = posting.fingerprint().equals(fingerprint(connection, posting.getReference()));
             return sameEntries
-                    ? new LedgerReceipt(LedgerStatus.POSTED, players(balances), sequence)
+                    ? new LedgerReceipt(LedgerStatus.POSTED, held(balances), sequence)
                     : LedgerReceipt.of(LedgerStatus.DUPLICATE);
         }
 
@@ -107,7 +107,7 @@ public class PostgresLedgerStore implements LedgerStore {
             balances.merge(entry.getTo(), entry.getAmount(), Long::sum);
         }
         for (Map.Entry<String, Long> balance : balances.entrySet()) {
-            if (LedgerAccounts.isPlayer(balance.getKey()) && balance.getValue() < 0) {
+            if (LedgerAccounts.isHeld(balance.getKey()) && balance.getValue() < 0) {
                 return LedgerReceipt.of(LedgerStatus.INSUFFICIENT_FUNDS);
             }
         }
@@ -134,7 +134,7 @@ public class PostgresLedgerStore implements LedgerStore {
             }
             update.executeBatch();
         }
-        return new LedgerReceipt(LedgerStatus.POSTED, players(balances), postingId);
+        return new LedgerReceipt(LedgerStatus.POSTED, held(balances), postingId);
     }
 
     private void ensureAccounts(@NotNull Connection connection, @NotNull SortedSet<String> accounts) throws SQLException {
@@ -187,14 +187,14 @@ public class PostgresLedgerStore implements LedgerStore {
         }
     }
 
-    private static @NotNull Map<String, Long> players(@NotNull Map<String, Long> balances) {
-        final Map<String, Long> players = new HashMap<>();
+    private static @NotNull Map<String, Long> held(@NotNull Map<String, Long> balances) {
+        final Map<String, Long> held = new HashMap<>();
         balances.forEach((account, balance) -> {
-            if (LedgerAccounts.isPlayer(account)) {
-                players.put(account, balance);
+            if (LedgerAccounts.isHeld(account)) {
+                held.put(account, balance);
             }
         });
-        return Map.copyOf(players);
+        return Map.copyOf(held);
     }
 
     /** Runs {@code work} in a transaction, committing only what posted, and retries when Postgres picks it to abort. */

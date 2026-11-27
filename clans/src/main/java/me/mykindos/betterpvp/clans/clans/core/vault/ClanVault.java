@@ -9,7 +9,7 @@ import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.leveling.ClanPerkManager;
 import me.mykindos.betterpvp.clans.clans.leveling.perk.model.ClanVaultSlot;
-import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
 import me.mykindos.betterpvp.core.menu.Windowed;
 import me.mykindos.betterpvp.core.utilities.UtilItem;
@@ -71,7 +71,7 @@ public final class ClanVault {
         lockedBy = player.getName();
         new GuiClanVault(player, this, previous).show(player).addCloseHandler(() -> {
             lockedBy = null;
-            clans.getInjector().getInstance(ClanRepository.class).updateClanVault(clan);
+            clans.getInjector().getInstance(ClanWriter.class).saveVault(clan);
         });
     }
 

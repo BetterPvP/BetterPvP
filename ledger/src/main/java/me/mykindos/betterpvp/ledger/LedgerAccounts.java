@@ -7,12 +7,14 @@ import java.util.UUID;
 /**
  * Account names.
  * <p>
- * A player account never goes below zero. Every other account stands for something outside the economy, such as a
- * shop or the world, and may go negative, so all balances together always add up to zero.
+ * A player or clan account holds real coins and never goes below zero. Every other account stands for something
+ * outside the economy, such as a shop or the world, and may go negative, so all balances together always add up to
+ * zero.
  */
 public final class LedgerAccounts {
 
     private static final String PLAYER_PREFIX = "player:";
+    private static final String CLAN_PREFIX = "clan:";
 
     /** Where a player's first balance comes from. */
     public static final String OPENING = "system:opening";
@@ -32,7 +34,25 @@ public final class LedgerAccounts {
         return PLAYER_PREFIX + player;
     }
 
+    public static @NotNull String clan(long clan) {
+        return CLAN_PREFIX + clan;
+    }
+
     public static boolean isPlayer(@NotNull String account) {
         return account.startsWith(PLAYER_PREFIX);
+    }
+
+    public static boolean isClan(@NotNull String account) {
+        return account.startsWith(CLAN_PREFIX);
+    }
+
+    /** The clan id in a {@link #clan(long)} account name. */
+    public static long clanOf(@NotNull String account) {
+        return Long.parseLong(account.substring(CLAN_PREFIX.length()));
+    }
+
+    /** Whether the account holds coins someone owns: a player's or a clan's. */
+    public static boolean isHeld(@NotNull String account) {
+        return isPlayer(account) || isClan(account);
     }
 }

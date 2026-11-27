@@ -1,12 +1,15 @@
 package me.mykindos.betterpvp.clans.clans.writer;
 
+import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
+import me.mykindos.betterpvp.clans.clans.ClanProperty;
 import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
 import me.mykindos.betterpvp.clans.protocol.ClanMutation;
 import me.mykindos.betterpvp.clans.protocol.ClanOp;
 import me.mykindos.betterpvp.clans.protocol.ClanRanks;
 import me.mykindos.betterpvp.clans.protocol.ClanReply;
 import me.mykindos.betterpvp.clans.protocol.ClanTopics;
+import me.mykindos.betterpvp.core.components.clans.data.ClanEnemy;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
 import me.mykindos.betterpvp.core.framework.net.BusMessage;
 import me.mykindos.betterpvp.core.framework.net.MessageBus;
@@ -18,6 +21,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -29,8 +33,8 @@ import java.util.function.Function;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anySet;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,7 +48,7 @@ class ServiceClanWriterTest {
 
     @BeforeEach
     void setUp() {
-        writer = new ServiceClanWriter(bus, feed, mock(ClanRepository.class));
+        writer = new ServiceClanWriter(mock(Clans.class), bus, feed, mock(ClanRepository.class));
     }
 
     @Test
@@ -80,7 +84,7 @@ class ServiceClanWriterTest {
 
         writer.enemy(clan(1L), clan(2L));
 
-        verify(feed, never()).refresh(anyCollection(), anyBoolean());
+        verify(feed, never()).refresh(anyCollection(), anySet());
     }
 
     @Test
@@ -89,7 +93,7 @@ class ServiceClanWriterTest {
 
         writer.setTrust(clan(1L), clan(2L), true);
 
-        verify(feed).refresh(List.of(1L, 2L), false);
+        verify(feed).refresh(List.of(1L, 2L), EnumSet.of(ClanChangeFeed.Part.CLAN));
     }
 
     @Test
@@ -98,7 +102,33 @@ class ServiceClanWriterTest {
 
         writer.addMember(clan(3L), new ClanMember(UUID.randomUUID(), ClanMember.MemberRank.RECRUIT, "Alex"));
 
-        verify(feed).refresh(List.of(3L), false);
+        verify(feed).refresh(List.of(3L), EnumSet.of(ClanChangeFeed.Part.CLAN));
+    }
+
+    @Test
+    void propertiesAreSentTogetherPerClanAndTheBalanceNever() {
+        final Clan clan = clan(4L);
+        writer.saveProperty(clan, ClanProperty.ENERGY.name(), 1200);
+        writer.saveProperty(clan, ClanProperty.POINTS.name(), 7);
+        writer.saveProperty(clan, ClanProperty.ENERGY.name(), 1100);
+        writer.saveProperty(clan, ClanProperty.BALANCE.name(), 900);
+
+        writer.flushProperties(true);
+
+        assertEquals(1, bus.requests.size());
+        final ClanMutation sent = bus.lastMutation();
+        assertEquals(ClanOp.PROPERTIES, sent.getOp());
+        assertEquals(Map.of("ENERGY", "1100", "POINTS", "7"), sent.getProperties());
+    }
+
+    @Test
+    void dominanceNamesTheEnemyAndTheValue() {
+        writer.setDominance(clan(1L), new ClanEnemy(clan(2L), 35));
+
+        final ClanMutation sent = bus.lastMutation();
+        assertEquals(ClanOp.DOMINANCE, sent.getOp());
+        assertEquals(2L, sent.getOther());
+        assertEquals("35", sent.getValue());
     }
 
     @Test

@@ -6,7 +6,7 @@ public enum LedgerStatus {
     /** Every entry landed. */
     POSTED,
 
-    /** A player account would have gone below zero, so nothing landed. */
+    /** A player or clan account would have gone below zero, so nothing landed. */
     INSUFFICIENT_FUNDS,
 
     /** Other entries already landed under the same reference, so nothing landed. */

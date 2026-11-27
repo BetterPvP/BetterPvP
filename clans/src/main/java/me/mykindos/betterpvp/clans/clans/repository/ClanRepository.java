@@ -5,7 +5,7 @@ import com.google.inject.Singleton;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
-import me.mykindos.betterpvp.clans.clans.core.ClanCore;
+import me.mykindos.betterpvp.clans.clans.ClanProperty;
 import me.mykindos.betterpvp.clans.clans.insurance.Insurance;
 import me.mykindos.betterpvp.clans.clans.insurance.InsuranceType;
 import me.mykindos.betterpvp.clans.clans.writer.CampGrant;
@@ -36,7 +36,6 @@ import org.bukkit.World;
 import org.bukkit.block.banner.Pattern;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BannerMeta;
-import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Nullable;
 import org.jooq.Field;
 import org.jooq.Query;
@@ -166,16 +165,69 @@ public class ClanRepository implements IRepository<Clan> {
             }
 
             if (banner != null && !banner.isEmpty()) {
-                final ItemStack bannerItem = ItemStack.deserializeBytes(Base64.getDecoder().decode(banner));
-                final ItemMeta meta = bannerItem.getItemMeta();
-                final BannerMeta bannerMeta = (BannerMeta) meta;
-                final BannerColor color = BannerColor.fromType(bannerItem.getType());
-                final List<Pattern> patterns = bannerMeta.getPatterns();
-                clan.setBanner(BannerWrapper.builder().baseColor(color).patterns(patterns).build());
+                readBanner(clan, banner);
             }
         } catch (DataAccessException ex) {
             log.error("Failed to load clan metadata for {}", clan.getId(), ex).submit();
         }
+    }
+
+    /** Sets the clan's banner from its stored form, as {@link #encodeBanner} writes it. */
+    public static void readBanner(Clan clan, String banner) {
+        final ItemStack bannerItem = ItemStack.deserializeBytes(Base64.getDecoder().decode(banner));
+        final BannerMeta bannerMeta = (BannerMeta) bannerItem.getItemMeta();
+        final BannerColor color = BannerColor.fromType(bannerItem.getType());
+        final List<Pattern> patterns = bannerMeta.getPatterns();
+        clan.setBanner(BannerWrapper.builder().baseColor(color).patterns(patterns).build());
+    }
+
+    public static String encodeBanner(Clan clan) {
+        return Base64.getEncoder().encodeToString(clan.getBanner().get().serializeAsBytes());
+    }
+
+    /** The core position as the clans table stores it, empty when the clan has no core. */
+    public static String encodeHome(Clan clan) {
+        final Location position = clan.getCore().getPosition();
+        return position == null ? "" : UtilWorld.locationToString(position, false);
+    }
+
+    /** Reads a clan's stored banner, vault and mailbox, or null when the clan has none. */
+    public @Nullable ClanMetadataRecord getMetadata(long clanId) {
+        return database.getDslContext().selectFrom(CLAN_METADATA)
+                .where(CLAN_METADATA.CLAN.eq(clanId))
+                .fetchOne();
+    }
+
+    /** Reads a clan's stored core position, empty when it has none. */
+    public String getHome(long clanId) {
+        final String home = database.getDslContext().select(CLANS.HOME)
+                .from(CLANS)
+                .where(CLANS.ID.eq(clanId))
+                .fetchOne(CLANS.HOME);
+        return home == null ? "" : home;
+    }
+
+    /** Reads a clan's stored properties, leaving out its balance, which the ledger keeps. */
+    public Result<Record2<String, String>> getProperties(long clanId) {
+        return database.getDslContext()
+                .select(CLAN_PROPERTIES.PROPERTY, CLAN_PROPERTIES.VALUE)
+                .from(CLAN_PROPERTIES)
+                .where(CLAN_PROPERTIES.CLAN.eq(clanId))
+                .and(CLAN_PROPERTIES.PROPERTY.ne(ClanProperty.BALANCE.name()))
+                .fetch();
+    }
+
+    /** Puts stored properties into the clan without writing them back. */
+    public void readProperties(Clan clan, Result<Record2<String, String>> properties) {
+        propertyMapper.parseProperties(properties, clan);
+    }
+
+    public List<String> getTerritoryChunks(long clanId) {
+        return database.getDslContext()
+                .select(CLAN_TERRITORY.CHUNK)
+                .from(CLAN_TERRITORY)
+                .where(CLAN_TERRITORY.CLAN.eq(clanId))
+                .fetch(CLAN_TERRITORY.CHUNK);
     }
 
     private void loadProperties(Clan clan) {
@@ -274,10 +326,8 @@ public class ClanRepository implements IRepository<Clan> {
     }
 
     public void updateClanCore(Clan clan) {
-        ClanCore core = clan.getCore();
-
         database.getAsyncDslContext().executeAsyncVoid(ctx -> {
-                    ctx.update(CLANS).set(CLANS.HOME, core.getPosition() == null ? "" : UtilWorld.locationToString(core.getPosition(), false))
+                    ctx.update(CLANS).set(CLANS.HOME, encodeHome(clan))
                             .where(CLANS.ID.eq(clan.getId()))
                             .execute();
                 })
@@ -302,7 +352,7 @@ public class ClanRepository implements IRepository<Clan> {
     public void updateClanBanner(Clan clan) {
         database.getAsyncDslContext()
                 .executeAsyncVoid(ctx -> ctx.update(CLAN_METADATA)
-                        .set(CLAN_METADATA.BANNER, Base64.getEncoder().encodeToString(clan.getBanner().get().serializeAsBytes()))
+                        .set(CLAN_METADATA.BANNER, encodeBanner(clan))
                         .where(CLAN_METADATA.CLAN.eq(clan.getId()))
                         .execute())
                 .exceptionally(ex -> {

@@ -1,11 +1,17 @@
 package me.mykindos.betterpvp.clans.clans.writer;
 
 import me.mykindos.betterpvp.clans.clans.Clan;
+import me.mykindos.betterpvp.core.components.clans.IClan;
+import me.mykindos.betterpvp.core.components.clans.data.ClanEnemy;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
+import me.mykindos.betterpvp.core.utilities.UtilWorld;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
- * The only way a clan's membership, ranks, relations and camp permissions are written.
+ * The only way a clan is written: its membership, ranks, relations, camp permissions, properties, core, banner,
+ * vault, mailbox, territory and dominance. A clan's balance is the ledger's and goes through {@link ClanBank}.
  * <p>
  * Callers change their in-memory {@link Clan} first, then tell the writer. Each method persists
  * what the caller just did. Nothing here sends messages to players or fires events.
@@ -46,4 +52,28 @@ public interface ClanWriter {
      * updated by the writer, not the caller.
      */
     void setCampPermission(long clanId, @NotNull CampGrant grant);
+
+    /** Persists a property the clan already holds. Writes may wait for {@link #flushProperties(boolean)}. */
+    void saveProperty(@NotNull Clan clan, @NotNull String property, @NotNull Object value);
+
+    /** Writes every property still waiting. */
+    void flushProperties(boolean async);
+
+    /** Persists the clan core's position, or that it has none. */
+    void setCore(@NotNull Clan clan);
+
+    void setBanner(@NotNull Clan clan);
+
+    void saveVault(@NotNull Clan clan);
+
+    /** Completes once the mailbox may be opened again. */
+    @NotNull CompletableFuture<Void> saveMailbox(@NotNull Clan clan);
+
+    /** Persists a chunk the clan just added to its territory, as {@link UtilWorld#chunkToFile} names it. */
+    void claim(@NotNull Clan clan, @NotNull String chunk);
+
+    void unclaim(@NotNull Clan clan, @NotNull String chunk);
+
+    /** Persists the clan's dominance over one enemy. */
+    void setDominance(@NotNull IClan clan, @NotNull ClanEnemy enemy);
 }

@@ -18,6 +18,8 @@ import java.util.UUID;
 @Builder
 public class ClanMutation {
 
+    private static final String PROPERTY_PREFIX = "property.";
+
     @NotNull ClanOp op;
     long clan;
     @Nullable Long other;
@@ -31,6 +33,10 @@ public class ClanMutation {
     @Nullable String scope;
     /** The permitted action a {@link ClanOp#CAMP_PERMISSION} edits. */
     @Nullable String action;
+    /** The new core location, banner, vault, mailbox, chunk or dominance, as its op describes. */
+    @Nullable String value;
+    /** The properties a {@link ClanOp#PROPERTIES} sets, by name. */
+    @Nullable Map<String, String> properties;
 
     public @NotNull Map<String, String> toPayload() {
         final Map<String, String> payload = new HashMap<>();
@@ -44,10 +50,20 @@ public class ClanMutation {
         putIfPresent(payload, "flag", flag);
         putIfPresent(payload, "scope", scope);
         putIfPresent(payload, "action", action);
+        putIfPresent(payload, "value", value);
+        if (properties != null) {
+            properties.forEach((property, propertyValue) -> payload.put(PROPERTY_PREFIX + property, propertyValue));
+        }
         return payload;
     }
 
     public static @NotNull ClanMutation fromPayload(@NotNull Map<String, String> payload) {
+        final Map<String, String> properties = new HashMap<>();
+        payload.forEach((key, propertyValue) -> {
+            if (key.startsWith(PROPERTY_PREFIX)) {
+                properties.put(key.substring(PROPERTY_PREFIX.length()), propertyValue);
+            }
+        });
         return ClanMutation.builder()
                 .op(ClanOp.valueOf(required(payload, "op")))
                 .clan(Long.parseLong(required(payload, "clan")))
@@ -59,6 +75,8 @@ public class ClanMutation {
                 .flag(Optional.ofNullable(payload.get("flag")).map(Boolean::parseBoolean).orElse(null))
                 .scope(payload.get("scope"))
                 .action(payload.get("action"))
+                .value(payload.get("value"))
+                .properties(properties.isEmpty() ? null : Map.copyOf(properties))
                 .build();
     }
 

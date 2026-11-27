@@ -1,7 +1,5 @@
 package me.mykindos.betterpvp.core.framework.economy.ledger;
 
-import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import me.mykindos.betterpvp.ledger.LedgerPosting;
 import me.mykindos.betterpvp.ledger.LedgerReceipt;
@@ -17,8 +15,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The ledger for a server that is the whole economy. Balances stay in each gamer's {@code BALANCE} property and
- * every posting is journalled. Answers at once, on the calling thread.
+ * The ledger for a server that is the whole economy. Balances stay where each holder caches them, such as a gamer's
+ * {@code BALANCE} property, and every posting is journalled. Answers at once, on the calling thread.
  */
 public class InProcessLedger implements Ledger {
 
@@ -36,10 +34,13 @@ public class InProcessLedger implements Ledger {
     }
 
     @Override
-    public @NotNull CompletableFuture<LedgerReceipt> open(@NotNull Gamer gamer) {
-        final String account = LedgerAccounts.player(gamer.getUniqueId());
+    public @NotNull CompletableFuture<LedgerReceipt> open(@NotNull LedgerParty party) {
+        final LedgerBalance balance = party.getBalance();
+        if (balance == null) {
+            return CompletableFuture.completedFuture(LedgerReceipt.of(LedgerStatus.INVALID));
+        }
         return CompletableFuture.completedFuture(
-                new LedgerReceipt(LedgerStatus.POSTED, Map.of(account, (long) gamer.getBalance()), 0));
+                new LedgerReceipt(LedgerStatus.POSTED, Map.of(party.getAccount(), balance.get()), 0));
     }
 
     @Override
@@ -53,10 +54,11 @@ public class InProcessLedger implements Ledger {
             return LedgerReceipt.of(LedgerStatus.INVALID);
         }
 
-        final Map<Gamer, Long> balances = new LinkedHashMap<>();
+        final Map<String, LedgerBalance> holders = new LinkedHashMap<>();
+        final Map<String, Long> balances = new LinkedHashMap<>();
         for (Movement movement : movements) {
-            if (!collect(movement.getFrom(), -movement.getAmount(), balances)
-                    || !collect(movement.getTo(), movement.getAmount(), balances)) {
+            if (!collect(movement.getFrom(), -movement.getAmount(), holders, balances)
+                    || !collect(movement.getTo(), movement.getAmount(), holders, balances)) {
                 return LedgerReceipt.of(LedgerStatus.INVALID);
             }
         }
@@ -67,9 +69,9 @@ public class InProcessLedger implements Ledger {
                 return LedgerReceipt.of(LedgerStatus.DUPLICATE);
             }
             if (landed != null) {
-                final Map<Gamer, Long> current = new LinkedHashMap<>();
-                balances.keySet().forEach(gamer -> current.put(gamer, (long) gamer.getBalance()));
-                return receipt(current);
+                final Map<String, Long> current = new HashMap<>();
+                holders.forEach((account, holder) -> current.put(account, holder.get()));
+                return new LedgerReceipt(LedgerStatus.POSTED, Map.copyOf(current), 0);
             }
         }
 
@@ -82,27 +84,26 @@ public class InProcessLedger implements Ledger {
             }
         }
 
-        balances.forEach((gamer, balance) -> gamer.saveProperty(GamerProperty.BALANCE, (int) (long) balance));
+        balances.forEach((account, balance) -> holders.get(account).set(balance));
         if (reference != null) {
             references.put(reference, posting.fingerprint());
         }
         journal.record(posting);
-        return receipt(balances);
+        return new LedgerReceipt(LedgerStatus.POSTED, Map.copyOf(balances), 0);
     }
 
-    /** Adds {@code delta} to the party's running balance, answering false for a player with no gamer to hold it. */
-    private static boolean collect(@NotNull LedgerParty party, long delta, @NotNull Map<Gamer, Long> balances) {
-        final Gamer gamer = party.getGamer();
-        if (gamer == null) {
-            return !LedgerAccounts.isPlayer(party.getAccount());
+    /**
+     * Adds {@code delta} to the party's running balance, answering false for a held account with nothing on this
+     * server to hold it.
+     */
+    private static boolean collect(@NotNull LedgerParty party, long delta, @NotNull Map<String, LedgerBalance> holders,
+                                   @NotNull Map<String, Long> balances) {
+        final LedgerBalance holder = party.getBalance();
+        if (holder == null) {
+            return !LedgerAccounts.isHeld(party.getAccount());
         }
-        balances.merge(gamer, gamer.getBalance() + delta, (running, ignored) -> running + delta);
+        holders.putIfAbsent(party.getAccount(), holder);
+        balances.merge(party.getAccount(), holder.get() + delta, (running, ignored) -> running + delta);
         return true;
-    }
-
-    private static @NotNull LedgerReceipt receipt(@NotNull Map<Gamer, Long> balances) {
-        final Map<String, Long> byAccount = new HashMap<>();
-        balances.forEach((gamer, balance) -> byAccount.put(LedgerAccounts.player(gamer.getUniqueId()), balance));
-        return new LedgerReceipt(LedgerStatus.POSTED, Map.copyOf(byAccount), 0);
     }
 }

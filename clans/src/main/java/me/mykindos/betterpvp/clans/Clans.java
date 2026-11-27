@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 import me.mykindos.betterpvp.clans.achievements.loader.ClansAchievementLoader;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.clans.clans.map.MapHandler;
 import me.mykindos.betterpvp.clans.clans.core.EnergyItem;
 import me.mykindos.betterpvp.clans.clans.explosion.ExplosiveResistanceBootstrap;
@@ -181,8 +182,8 @@ public class Clans extends BPvPPlugin {
 
     @Override
     public void onDisable() {
-        clanManager.getRepository().processPropertyUpdates(false);
         if (injector != null) {
+            injector.getInstance(ClanWriter.class).flushProperties(false);
             // Un-paste every ship before the worlds save. The hulls are drawn fresh each boot from their structures, so
             // letting them reach disk would bake a copy into the map that no longer tracks the structure it came from.
             injector.getInstance(ShipService.class).restoreAll();

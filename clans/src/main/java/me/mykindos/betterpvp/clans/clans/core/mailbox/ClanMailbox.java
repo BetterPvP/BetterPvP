@@ -7,7 +7,7 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
-import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.item.ItemFactory;
 import me.mykindos.betterpvp.core.menu.Windowed;
 import me.mykindos.betterpvp.core.utilities.UtilItem;
@@ -54,8 +54,8 @@ public final class ClanMailbox {
         Preconditions.checkState(!isLocked(), "Clan mailbox is locked");
         lockedBy = player.getName();
         new GuiClanMailbox(this, itemFactory, previous).show(player).addCloseHandler(() -> {
-            ClanRepository instance = JavaPlugin.getPlugin(Clans.class).getInjector().getInstance(ClanRepository.class);
-            instance.updateClanMailbox(clan).whenComplete((unused, throwable) -> {
+            final ClanWriter writer = JavaPlugin.getPlugin(Clans.class).getInjector().getInstance(ClanWriter.class);
+            writer.saveMailbox(clan).whenComplete((unused, throwable) -> {
                 if(throwable != null) {
                     log.error("Failed to update clan mailbox", throwable).submit();
                     return;

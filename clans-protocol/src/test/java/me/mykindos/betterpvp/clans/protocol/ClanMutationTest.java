@@ -3,6 +3,7 @@ package me.mykindos.betterpvp.clans.protocol;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -25,6 +26,23 @@ class ClanMutationTest {
                 .build();
 
         assertEquals(mutation, ClanMutation.fromPayload(mutation.toPayload()));
+    }
+
+    @Test
+    void propertiesSurviveTheWire() {
+        final ClanMutation mutation = ClanMutation.builder()
+                .op(ClanOp.PROPERTIES)
+                .clan(42L)
+                .properties(Map.of("ENERGY", "1200", "POINTS", "5"))
+                .build();
+
+        assertEquals(mutation, ClanMutation.fromPayload(mutation.toPayload()));
+    }
+
+    @Test
+    void aBalanceSurvivesTheWire() {
+        final ClanBalance balance = new ClanBalance(42L, 900L, 17L);
+        assertEquals(balance, ClanBalance.fromPayload(balance.toPayload()));
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.clans.clans.commands.ClanCommand;
 import me.mykindos.betterpvp.clans.clans.commands.ClanSubCommand;
 import me.mykindos.betterpvp.core.client.Client;
@@ -23,9 +24,12 @@ import java.util.Optional;
 @SubCommand(ClanCommand.class)
 public class SetDominanceSubCommand extends ClanSubCommand {
 
+    private final ClanWriter writer;
+
     @Inject
-    public SetDominanceSubCommand(ClanManager clanManager, ClientManager clientManager) {
+    public SetDominanceSubCommand(ClanManager clanManager, ClientManager clientManager, ClanWriter writer) {
         super(clanManager, clientManager);
+        this.writer = writer;
     }
 
     @Override
@@ -79,8 +83,8 @@ public class SetDominanceSubCommand extends ClanSubCommand {
 
         playerClanEnemy.setDominance(dominance);
         targetClanEnemy.setDominance(0);
-        clanManager.getRepository().updateDominance(playerClan, playerClanEnemy);
-        clanManager.getRepository().updateDominance(targetClan, targetClanEnemy);
+        writer.setDominance(playerClan, playerClanEnemy);
+        writer.setDominance(targetClan, targetClanEnemy);
 
         playerClan.getMembers().forEach(member -> {
             Player clanPlayer = org.bukkit.Bukkit.getPlayer(member.getUuid());

@@ -36,6 +36,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -53,7 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class ClanServiceTest {
 
     private static final Set<String> CLAN_TABLES = Set.of("clans", "clan_metadata", "clan_members", "clan_alliances",
-            "clan_enemies", "clan_camp_permissions");
+            "clan_enemies", "clan_camp_permissions", "clan_properties", "clan_territory");
     private static final Path MIGRATIONS = Path.of("../clans/src/main/resources/clans-migrations/postgres");
 
     @Container
@@ -181,6 +182,54 @@ class ClanServiceTest {
     }
 
     @Test
+    void aPropertyBannerOrVaultChangedOnOneServerShowsOnAnotherWithinASecond() throws Exception {
+        final Connection first = server();
+        final Connection second = server();
+        assertTrue(send(first, create(1L, "Alpha", UUID.randomUUID())).isApplied());
+
+        assertShowsWithinASecond(first, second,
+                ClanMutation.builder().op(ClanOp.PROPERTIES).clan(1L).properties(Map.of("ENERGY", "4200")).build(),
+                "SELECT value FROM clan_properties WHERE clan = 1 AND property = 'ENERGY'", "4200");
+        assertShowsWithinASecond(first, second,
+                ClanMutation.builder().op(ClanOp.BANNER).clan(1L).value("banner-bytes").build(),
+                "SELECT banner FROM clan_metadata WHERE clan = 1", "banner-bytes");
+        assertShowsWithinASecond(first, second,
+                ClanMutation.builder().op(ClanOp.VAULT).clan(1L).value("vault-items").build(),
+                "SELECT vault FROM clan_metadata WHERE clan = 1", "vault-items");
+    }
+
+    @Test
+    void aChunkClaimedByAnotherClanIsRefused() {
+        final Connection server = server();
+        assertTrue(send(server, create(1L, "Alpha", UUID.randomUUID())).isApplied());
+        assertTrue(send(server, create(2L, "Bravo", UUID.randomUUID())).isApplied());
+        final String chunk = "world/ 4/ -2";
+
+        assertTrue(send(server, ClanMutation.builder().op(ClanOp.CLAIM).clan(1L).value(chunk).build()).isApplied());
+        assertFalse(send(server, ClanMutation.builder().op(ClanOp.CLAIM).clan(2L).value(chunk).build()).isApplied());
+        assertEquals("1", text("SELECT clan FROM clan_territory WHERE chunk = '" + chunk + "'"));
+
+        assertTrue(send(server, ClanMutation.builder().op(ClanOp.UNCLAIM).clan(1L).value(chunk).build()).isApplied());
+        assertTrue(send(server, ClanMutation.builder().op(ClanOp.CLAIM).clan(2L).value(chunk).build()).isApplied());
+    }
+
+    @Test
+    void dominanceIsSetForOneSideOfAnEnmity() {
+        final Connection server = server();
+        assertTrue(send(server, create(1L, "Alpha", UUID.randomUUID())).isApplied());
+        assertTrue(send(server, create(2L, "Bravo", UUID.randomUUID())).isApplied());
+        assertFalse(send(server, ClanMutation.builder().op(ClanOp.DOMINANCE).clan(1L).other(2L).value("20").build())
+                .isApplied(), "Clans that are not enemies have no dominance");
+        assertTrue(send(server, ClanMutation.builder().op(ClanOp.ENEMY).clan(1L).other(2L).build()).isApplied());
+
+        assertTrue(send(server, ClanMutation.builder().op(ClanOp.DOMINANCE).clan(1L).other(2L).value("20").build())
+                .isApplied());
+
+        assertEquals(20, count("SELECT dominance FROM clan_enemies WHERE clan = 1 AND enemy_clan = 2"));
+        assertEquals(0, count("SELECT dominance FROM clan_enemies WHERE clan = 2 AND enemy_clan = 1"));
+    }
+
+    @Test
     void aPlayerJoinedToTwoClansFromTwoServersEndsUpInOne() throws Exception {
         final Connection first = server();
         final Connection second = server();
@@ -239,6 +288,31 @@ class ClanServiceTest {
             replies.add(send(server, member(ClanOp.MEMBER_PROMOTE, clan, shared, null)));
             return replies;
         });
+    }
+
+    /** Sends {@code mutation} from {@code first} and waits for {@code second} to see it announced and stored. */
+    private void assertShowsWithinASecond(Connection first, Connection second, ClanMutation mutation, String stored,
+                                          String expected) throws Exception {
+        final CountDownLatch seen = new CountDownLatch(1);
+        final AtomicLong seenAfter = new AtomicLong();
+        final long[] sentAt = new long[1];
+        final Dispatcher dispatcher = second.createDispatcher(message -> {
+            final ClanChange change = change(message);
+            if (change.getOp() == mutation.getOp() && change.getClans().contains(mutation.getClan())
+                    && expected.equals(text(stored))) {
+                seenAfter.set(System.nanoTime() - sentAt[0]);
+                seen.countDown();
+            }
+        });
+        dispatcher.subscribe(Subjects.bus(PREFIX, ClanTopics.CHANGED));
+        second.flush(Duration.ofSeconds(2));
+
+        sentAt[0] = System.nanoTime();
+        assertTrue(send(first, mutation).isApplied());
+
+        assertTrue(seen.await(1, TimeUnit.SECONDS), "The other server read the " + mutation.getOp() + " within a second");
+        assertTrue(Duration.ofNanos(seenAfter.get()).compareTo(Duration.ofSeconds(1)) < 0);
+        second.closeDispatcher(dispatcher);
     }
 
     private static ClanMutation create(long clan, String name, UUID leader) {

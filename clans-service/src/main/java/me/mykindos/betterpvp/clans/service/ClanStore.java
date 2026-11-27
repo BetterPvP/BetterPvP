@@ -10,6 +10,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -67,6 +68,58 @@ public class ClanStore {
                             ON CONFLICT (clan, scope, rank, action) DO UPDATE SET allowed = EXCLUDED.allowed""",
                     clan, required(mutation.getScope()), Objects.requireNonNullElse(mutation.getRank(), ""),
                     Objects.requireNonNullElse(mutation.getAction(), ""), Boolean.TRUE.equals(mutation.getFlag()));
+            case PROPERTIES -> properties(connection, clan, required(mutation.getProperties()));
+            case CORE -> update(connection, "UPDATE clans SET home = ? WHERE id = ?",
+                    Objects.requireNonNullElse(mutation.getValue(), ""), clan);
+            case BANNER -> update(connection, "UPDATE clan_metadata SET banner = ? WHERE clan = ?",
+                    required(mutation.getValue()), clan);
+            case VAULT -> update(connection, "UPDATE clan_metadata SET vault = ? WHERE clan = ?",
+                    required(mutation.getValue()), clan);
+            case MAILBOX -> update(connection, "UPDATE clan_metadata SET mailbox = ? WHERE clan = ?",
+                    required(mutation.getValue()), clan);
+            case CLAIM -> claim(connection, clan, required(mutation.getValue()));
+            case UNCLAIM -> update(connection, "DELETE FROM clan_territory WHERE clan = ? AND chunk = ?",
+                    clan, required(mutation.getValue()));
+            case DOMINANCE -> dominance(connection, clan, required(mutation.getOther()), required(mutation.getValue()));
+        }
+    }
+
+    private void properties(@NotNull Connection connection, long clan, @NotNull Map<String, String> properties)
+            throws SQLException {
+        for (Map.Entry<String, String> property : properties.entrySet()) {
+            update(connection, """
+                    INSERT INTO clan_properties (clan, property, value) VALUES (?, ?, ?)
+                    ON CONFLICT (clan, property) DO UPDATE SET value = EXCLUDED.value""",
+                    clan, property.getKey(), property.getValue());
+        }
+    }
+
+    private void claim(@NotNull Connection connection, long clan, @NotNull String chunk)
+            throws ClanRefusal, SQLException {
+        final boolean taken = exists(connection, """
+                        SELECT 1 FROM clan_territory t JOIN clans c ON c.id = t.clan
+                        WHERE t.chunk = ? AND t.clan <> ? AND c.realm = (SELECT realm FROM clans WHERE id = ?)""",
+                chunk, clan, clan);
+        if (taken) {
+            throw new ClanRefusal(chunk + " is claimed by another clan");
+        }
+        update(connection, """
+                INSERT INTO clan_territory (clan, chunk) VALUES (?, ?)
+                ON CONFLICT (clan, chunk) DO NOTHING""", clan, chunk);
+    }
+
+    private void dominance(@NotNull Connection connection, long clan, long other, @NotNull String value)
+            throws ClanRefusal, SQLException {
+        final int dominance;
+        try {
+            dominance = Integer.parseInt(value);
+        } catch (NumberFormatException ex) {
+            throw new ClanRefusal("Dominance " + value + " is not a number");
+        }
+        final int changed = update(connection,
+                "UPDATE clan_enemies SET dominance = ? WHERE clan = ? AND enemy_clan = ?", dominance, clan, other);
+        if (changed == 0) {
+            throw new ClanRefusal("Clans " + clan + " and " + other + " are not enemies");
         }
     }
 

@@ -2,9 +2,6 @@ package me.mykindos.betterpvp.core.framework.economy.ledger;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
-import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import me.mykindos.betterpvp.ledger.LedgerPosting;
 import me.mykindos.betterpvp.ledger.LedgerProtocol;
 import me.mykindos.betterpvp.ledger.LedgerReceipt;
@@ -21,8 +18,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 /**
- * The ledger as the ledger service keeps it. Every posting is a request to the service, and a player's
- * {@code BALANCE} property is set to the balance the service answers with.
+ * The ledger as the ledger service keeps it. Every posting is a request to the service, and each held account's
+ * cached balance, such as a player's {@code BALANCE} property, is set to the balance the service answers with.
  * <p>
  * Answers arrive in any order, so each account remembers the sequence of the answer it last took and ignores older
  * ones.
@@ -45,10 +42,10 @@ public class ServiceLedger implements Ledger {
         if (posting.problem() != null) {
             return CompletableFuture.completedFuture(LedgerReceipt.of(LedgerStatus.INVALID));
         }
-        final Map<String, Gamer> gamers = new HashMap<>();
+        final Map<String, LedgerBalance> holders = new HashMap<>();
         for (Movement movement : movements) {
-            track(movement.getFrom(), gamers);
-            track(movement.getTo(), gamers);
+            track(movement.getFrom(), holders);
+            track(movement.getTo(), holders);
         }
 
         final Map<String, String> payload = LedgerProtocol.encode(posting);
@@ -59,14 +56,17 @@ public class ServiceLedger implements Ledger {
                     ? transport.ask(LedgerProtocol.POST, payload)
                     : CompletableFuture.completedFuture(receipt));
         }
-        return answer.thenApplyAsync(receipt -> cache(receipt, gamers), mainThread);
+        return answer.thenApplyAsync(receipt -> cache(receipt, holders), mainThread);
     }
 
     @Override
-    public @NotNull CompletableFuture<LedgerReceipt> open(@NotNull Gamer gamer) {
-        final String account = LedgerAccounts.player(gamer.getUniqueId());
-        return transport.ask(LedgerProtocol.OPEN, LedgerProtocol.encodeOpen(account, gamer.getBalance()))
-                .thenApplyAsync(receipt -> cache(receipt, Map.of(account, gamer)), mainThread);
+    public @NotNull CompletableFuture<LedgerReceipt> open(@NotNull LedgerParty party) {
+        final LedgerBalance balance = party.getBalance();
+        if (balance == null) {
+            return CompletableFuture.completedFuture(LedgerReceipt.of(LedgerStatus.INVALID));
+        }
+        return transport.ask(LedgerProtocol.OPEN, LedgerProtocol.encodeOpen(party.getAccount(), balance.get()))
+                .thenApplyAsync(receipt -> cache(receipt, Map.of(party.getAccount(), balance)), mainThread);
     }
 
     @Override
@@ -74,24 +74,24 @@ public class ServiceLedger implements Ledger {
         return transport.isAvailable();
     }
 
-    private static void track(@NotNull LedgerParty party, @NotNull Map<String, Gamer> gamers) {
-        if (party.getGamer() != null) {
-            gamers.put(party.getAccount(), party.getGamer());
+    private static void track(@NotNull LedgerParty party, @NotNull Map<String, LedgerBalance> holders) {
+        if (party.getBalance() != null) {
+            holders.put(party.getAccount(), party.getBalance());
         }
     }
 
-    private @NotNull LedgerReceipt cache(@NotNull LedgerReceipt receipt, @NotNull Map<String, Gamer> gamers) {
+    private @NotNull LedgerReceipt cache(@NotNull LedgerReceipt receipt, @NotNull Map<String, LedgerBalance> holders) {
         if (!receipt.isPosted()) {
             return receipt;
         }
         receipt.getBalances().forEach((account, balance) -> {
-            final Gamer gamer = gamers.get(account);
+            final LedgerBalance holder = holders.get(account);
             final Long seen = sequences.getIfPresent(account);
-            if (gamer == null || (seen != null && seen > receipt.getSequence())) {
+            if (holder == null || (seen != null && seen > receipt.getSequence())) {
                 return;
             }
             sequences.put(account, receipt.getSequence());
-            gamer.saveProperty(GamerProperty.BALANCE, (int) Math.min(Integer.MAX_VALUE, balance));
+            holder.set(balance);
         });
         return receipt;
     }

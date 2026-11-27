@@ -135,7 +135,7 @@ public class ClanEventListener extends ClanListener {
 
         final String chunkString = UtilWorld.chunkToFile(chunk);
         clan.getTerritory().add(new ClanTerritory(chunkString));
-        this.clanManager.getRepository().saveClanTerritory(clan, chunkString);
+        this.writer.claim(clan, chunkString);
 
         // If the clan has no territory, set the core position
         if (clan.getTerritory().size() == 1) {
@@ -174,7 +174,7 @@ public class ClanEventListener extends ClanListener {
             if (selfClan && targetClan.getTerritory().size() == 1) {
                 targetClan.getCore().removeBlock(); // Remove the core block if it exists
                 targetClan.getCore().setPosition(null);
-                this.clanManager.getRepository().updateClanCore(targetClan);
+                this.writer.setCore(targetClan);
                 return; // Allow the core to be unclaimed if it is the only territory and the player is in the clan
             }
 
@@ -247,7 +247,7 @@ public class ClanEventListener extends ClanListener {
                         Component.text(chunkToPrettyString, NamedTextColor.YELLOW));
             }
         });
-        this.clanManager.getRepository().deleteClanTerritory(targetClan, chunkString);
+        this.writer.unclaim(targetClan, chunkString);
         targetClan.getTerritory().removeIf(territory -> territory.getChunk().equals(UtilWorld.chunkToFile(chunk)));
 
         log.info("{} ({}) unclaimed {} from {} ({})", event.getPlayer().getName(), event.getPlayer().getUniqueId(),
@@ -1024,7 +1024,7 @@ public class ClanEventListener extends ClanListener {
 
         clientManager.search().online(player).getStatContainer().incrementStat(ClientStat.CLANS_SET_CORE, 1);
 
-        this.clanManager.getRepository().updateClanCore(clan);
+        this.writer.setCore(clan);
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

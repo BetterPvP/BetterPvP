@@ -9,8 +9,8 @@ import java.util.OptionalLong;
 /**
  * The answer to a posting.
  * <p>
- * {@code balances} holds the balance of every player account the posting touched, as of {@code sequence}. Sequences
- * only grow for an account, so a holder of a cached balance keeps whichever answer has the higher one.
+ * {@code balances} holds the balance of every player and clan account the posting touched, as of {@code sequence}.
+ * Sequences only grow for an account, so a holder of a cached balance keeps whichever answer has the higher one.
  */
 @Value
 public class LedgerReceipt {

@@ -8,7 +8,12 @@ public interface IAuctionDeliveryService {
         return false;
     }
 
-    default boolean deliverCurrency(UUID target, int amount) {
+    /**
+     * Pays {@code amount} to {@code target}.
+     *
+     * @param reference names the payment so it lands at most once, however many times it is delivered
+     */
+    default boolean deliverCurrency(UUID target, int amount, String reference) {
         return false;
     }
 

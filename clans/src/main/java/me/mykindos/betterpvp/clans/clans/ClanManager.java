@@ -141,15 +141,6 @@ public class ClanManager extends Manager<Long, Clan> {
     }
 
     /**
-     * Updates the name of a given clan in the repository.
-     *
-     * @param clan the clan whose name is to be updated
-     */
-    public void updateClanName(Clan clan) {
-        getRepository().updateClanName(clan);
-    }
-
-    /**
      * Retrieves a clan based on its unique identifier.
      * If the provided ID is null, an empty {@code Optional} is returned.
      *

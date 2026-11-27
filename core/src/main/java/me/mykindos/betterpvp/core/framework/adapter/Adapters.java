@@ -2,6 +2,7 @@ package me.mykindos.betterpvp.core.framework.adapter;
 
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.framework.BPvPPlugin;
+import me.mykindos.betterpvp.core.framework.role.RoleGate;
 import org.bukkit.Bukkit;
 
 import java.lang.reflect.InvocationTargetException;
@@ -14,12 +15,33 @@ import java.util.stream.Collectors;
 public final class Adapters {
 
     private final BPvPPlugin plugin;
+    private final RoleGate roleGate;
 
     public Adapters(BPvPPlugin plugin) {
-        this.plugin = plugin;
+        this(plugin, RoleGate.current());
     }
 
+    public Adapters(BPvPPlugin plugin, RoleGate roleGate) {
+        this.plugin = plugin;
+        this.roleGate = roleGate;
+    }
+
+    /**
+     * Whether a feature class installs here: it is concrete, the plugins it adapts are present and it runs on this
+     * server's role.
+     */
     public boolean canLoad(Class<?> clazz) {
+        return hasDependencies(clazz) && runsOnThisRole(clazz);
+    }
+
+    public boolean runsOnThisRole(Class<?> clazz) {
+        return roleGate.allows(clazz);
+    }
+
+    /**
+     * Whether a class is concrete and the plugins it adapts are present, regardless of role.
+     */
+    public boolean hasDependencies(Class<?> clazz) {
         if (Modifier.isAbstract(clazz.getModifiers()) || Modifier.isInterface(clazz.getModifiers())) {
             return false;
         }
@@ -36,8 +58,11 @@ public final class Adapters {
 
     public void loadAdapters(Collection<Class<?>> adapters) {
         for (Class<?> clazz : adapters) {
-            if (!canLoad(clazz)) {
+            if (!hasDependencies(clazz)) {
                 log.warn("Could not load adapter " + clazz.getSimpleName() + "! Dependencies not found!").submit();
+                continue;
+            }
+            if (!runsOnThisRole(clazz)) {
                 continue;
             }
 

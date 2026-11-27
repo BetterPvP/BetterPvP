@@ -9,6 +9,7 @@ import me.mykindos.betterpvp.core.command.SpigotCommandWrapper;
 import me.mykindos.betterpvp.core.command.SubCommand;
 import me.mykindos.betterpvp.core.framework.BPvPPlugin;
 import me.mykindos.betterpvp.core.framework.Loader;
+import me.mykindos.betterpvp.core.framework.role.RoleGate;
 import me.mykindos.betterpvp.core.locale.Translations;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
@@ -34,7 +35,7 @@ public class CommandLoader extends Loader {
     public void loadAll(Set<Class<? extends Command>> classes) {
         for (var clazz : classes) {
             if (Command.class.isAssignableFrom(clazz) && !clazz.isAnnotationPresent(SubCommand.class)) {
-                if (!Modifier.isAbstract(clazz.getModifiers())) {
+                if (!Modifier.isAbstract(clazz.getModifiers()) && RoleGate.current().allows(clazz)) {
                     load(clazz);
                 }
             }
@@ -44,6 +45,9 @@ public class CommandLoader extends Loader {
     public void loadSubCommands(Set<Class<?>> classes) {
         for (var clazz : classes) {
             SubCommand subCommandAnnotation = clazz.getAnnotation(SubCommand.class);
+            if (!RoleGate.current().allows(clazz) || !RoleGate.current().allows(subCommandAnnotation.value())) {
+                continue;
+            }
             ICommand command = plugin.getInjector().getInstance(subCommandAnnotation.value());
             ICommand subCommand = (ICommand) plugin.getInjector().getInstance(clazz);
             plugin.getInjector().injectMembers(subCommand);

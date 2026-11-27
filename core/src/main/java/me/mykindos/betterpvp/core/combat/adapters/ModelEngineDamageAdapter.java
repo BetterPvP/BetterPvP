@@ -12,6 +12,8 @@ import me.mykindos.betterpvp.core.combat.events.DamageEvent;
 import me.mykindos.betterpvp.core.combat.throwables.events.ThrowableHitEntityEvent;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapter;
 import me.mykindos.betterpvp.core.framework.customtypes.KeyValue;
+import me.mykindos.betterpvp.core.framework.role.RunsOn;
+import me.mykindos.betterpvp.core.framework.role.ServerRole;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.events.FetchNearbyEntityEvent;
@@ -25,6 +27,7 @@ import org.bukkit.event.entity.EntityDeathEvent;
 import java.util.HashSet;
 import java.util.Set;
 
+@RunsOn({ServerRole.RESOURCE, ServerRole.DUNGEON, ServerRole.EVENT})
 @PluginAdapter("ModelEngine")
 @PluginAdapter("MythicMobs")
 @Singleton

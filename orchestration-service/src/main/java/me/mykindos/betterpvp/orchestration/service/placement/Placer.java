@@ -70,7 +70,7 @@ public class Placer {
     public PlacementDecision place(String siteId, long ownerId, boolean owned) {
         try {
             if (!owned) {
-                return choose(roleOf.apply(siteId));
+                return promised(choose(roleOf.apply(siteId)));
             }
 
             // One decision per site at a time here, so two asks never both allocate a server.
@@ -121,7 +121,7 @@ public class Placer {
             }
 
             if (leases.claim(siteId, ownerId, chosen.getServer(), clock.getAsLong(), current.orElse(null))) {
-                return chosen;
+                return promised(chosen);
             }
             // Another replica wrote first. Reading again finds its lease and answers with that host.
         }
@@ -144,7 +144,6 @@ public class Placer {
                 // The fullest with room first, so servers fill up and empty ones can be given back.
                 .min(Comparator.comparingInt(this::free));
         if (roomiest.isPresent()) {
-            promise(roomiest.get().getServer());
             return PlacementDecision.of(PlacementMessages.PLACED, roomiest.get().getServer());
         }
 
@@ -152,7 +151,6 @@ public class Placer {
         if (allocated.isEmpty()) {
             return PlacementDecision.unavailable("no " + role + " server could be allocated");
         }
-        promise(allocated.get());
         return PlacementDecision.of(PlacementMessages.ALLOCATED, allocated.get());
     }
 
@@ -172,11 +170,15 @@ public class Placer {
         return slots.getFree() - promisedTo(slots.getServer());
     }
 
-    private void promise(String server) {
-        final Deque<Long> times = promised.computeIfAbsent(server, key -> new ArrayDeque<>());
-        synchronized (times) {
-            times.addLast(clock.getAsLong());
+    /** Counts a decision against its server's free slots, once it is final. */
+    private PlacementDecision promised(PlacementDecision decision) {
+        if (decision.isPlaced()) {
+            final Deque<Long> times = promised.computeIfAbsent(decision.getServer(), key -> new ArrayDeque<>());
+            synchronized (times) {
+                times.addLast(clock.getAsLong());
+            }
         }
+        return decision;
     }
 
     private int promisedTo(String server) {

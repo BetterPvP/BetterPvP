@@ -32,6 +32,10 @@ class PlacerTest {
         final Map<String, Lease> stored = new HashMap<>();
         final Set<String> advertised = new HashSet<>();
         long revision;
+        /** Claims to fail before the next one succeeds, as when another write lands between the read and this one. */
+        int conflicts;
+        /** Where another Placement replica's lease lands when it wins one of those conflicts, or nowhere. */
+        String winner;
 
         @Override
         public Optional<Lease> read(String siteId, long ownerId) {
@@ -41,6 +45,13 @@ class PlacerTest {
         @Override
         public boolean claim(String siteId, long ownerId, String server, long placed, Lease replacing) {
             final String key = siteId + "." + ownerId;
+            if (conflicts > 0) {
+                conflicts--;
+                if (winner != null) {
+                    stored.put(key, new Lease(winner, placed, ++revision));
+                }
+                return false;
+            }
             final Lease current = stored.get(key);
             if (current != null && (replacing == null || current.getRevision() != replacing.getRevision())) {
                 return false;
@@ -224,5 +235,32 @@ class PlacerTest {
 
         assertFalse(placer.release("camp", 42, "camp-a"));
         assertEquals("camp-b", leases.stored.get("camp.42").getServer());
+    }
+
+    @Test
+    @DisplayName("camps whose stale leases take retries to replace still fill a server to its real capacity")
+    void retriedClaimsFillToCapacity() {
+        for (long owner = 1; owner <= 10; owner++) {
+            leases.stored.put("camp." + owner, new Lease("camp-gone", 0, ++leases.revision));
+        }
+        now.addAndGet(Duration.ofSeconds(61).toMillis());
+        pool.servers = List.of(new ServerPool.Slots("camp-a", 10));
+
+        for (long owner = 1; owner <= 10; owner++) {
+            leases.conflicts = 2;
+            assertEquals("camp-a", placer.place("camp", owner, true).getServer(), "camp " + owner);
+        }
+        assertEquals("camp-new", placer.place("camp", 11, true).getServer());
+    }
+
+    @Test
+    @DisplayName("losing a claim to another replica leaves the server it had picked with every slot")
+    void lostClaimPromisesNothing() {
+        pool.servers = List.of(new ServerPool.Slots("camp-a", 1), new ServerPool.Slots("camp-b", 5));
+        leases.conflicts = 1;
+        leases.winner = "camp-b";
+
+        assertEquals(PlacementMessages.HOSTED, placer.place("camp", 1, true).getOutcome());
+        assertEquals("camp-a", placer.place("camp", 2, true).getServer());
     }
 }

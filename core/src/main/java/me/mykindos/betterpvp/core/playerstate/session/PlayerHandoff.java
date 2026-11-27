@@ -68,6 +68,11 @@ public class PlayerHandoff {
                         owned.put(player, new Ownership(epoch.getAsLong(), new AtomicLong(fence), System.currentTimeMillis()));
                         state.ifPresent(loaded -> arriving.put(player, loaded));
                         return true;
+                    })
+                    .whenComplete((ignored, failure) -> {
+                        if (failure != null) {
+                            leases.release(player, epoch.getAsLong());
+                        }
                     });
         });
     }

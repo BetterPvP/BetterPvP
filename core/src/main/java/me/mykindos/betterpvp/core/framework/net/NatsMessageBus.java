@@ -43,6 +43,7 @@ public class NatsMessageBus implements MessageBus {
     private final Map<String, List<Consumer<BusMessage>>> subscribers = new ConcurrentHashMap<>();
     private final Map<String, List<Function<BusMessage, Optional<BusMessage>>>> responders = new ConcurrentHashMap<>();
     private final Map<String, List<BusMessage>> awaitedReplies = new ConcurrentHashMap<>();
+    private final Map<String, CompletableFuture<Optional<BusMessage>>> awaitedAnswers = new ConcurrentHashMap<>();
     private final Set<String> topics = ConcurrentHashMap.newKeySet();
 
     private final Connection connection;
@@ -87,13 +88,31 @@ public class NatsMessageBus implements MessageBus {
             answered.complete(List.copyOf(replies));
         }, timeout);
 
+        sendRequest(message, correlationId);
+        return answered;
+    }
+
+    @Override
+    public @NotNull CompletableFuture<Optional<BusMessage>> ask(@NotNull BusMessage message, @NotNull Duration timeout) {
+        final String correlationId = UUID.randomUUID().toString();
+        final CompletableFuture<Optional<BusMessage>> answered = new CompletableFuture<>();
+        awaitedAnswers.put(correlationId, answered);
+
+        schedule(() -> {
+            awaitedAnswers.remove(correlationId);
+            answered.complete(Optional.empty());
+        }, timeout);
+
+        sendRequest(message, correlationId);
+        return answered;
+    }
+
+    private void sendRequest(@NotNull BusMessage message, @NotNull String correlationId) {
         send(Subjects.bus(prefix, message.getTopic()), inbox + "." + correlationId, envelope(BusMessage.builder()
                 .topic(message.getTopic())
                 .correlationId(correlationId)
                 .payload(message.getPayload())
                 .build(), false));
-
-        return answered;
     }
 
     @Override
@@ -168,6 +187,12 @@ public class NatsMessageBus implements MessageBus {
             final List<BusMessage> waiting = awaitedReplies.get(correlationId);
             if (waiting != null) {
                 waiting.add(message(envelope, correlationId));
+            }
+            final CompletableFuture<Optional<BusMessage>> answer = awaitedAnswers.remove(correlationId);
+            if (answer != null) {
+                // Completed off the NATS thread so whatever the caller chains on cannot hold up delivery.
+                final BusMessage reply = message(envelope, correlationId);
+                answer.completeAsync(() -> Optional.of(reply));
             }
             return;
         }

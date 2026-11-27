@@ -27,8 +27,6 @@ public class NetworkLayer {
     public static final String NATS = "nats";
     public static final String REDIS = "redis";
     public static final String LOCAL = "local";
-    public static final String SERVICE = "service";
-    public static final String DIRECTORY = "directory";
 
     private final Core core;
     private final NetworkTransports transports;
@@ -63,8 +61,8 @@ public class NetworkLayer {
         transports.registerDirectory(REDIS, () -> redis.isUsable() ? new RedisSiteDirectory(core, redis.getPool()) : null);
         transports.registerTransfer(PROXY, proxyTransfer::get);
         // Placement runs beside NATS, so a network without NATS has no service to ask.
-        transports.registerHosts(SERVICE, () -> nats.isUsable() ? new PlacementSiteHosts(bus()) : null);
-        transports.registerHosts(DIRECTORY, () -> new DirectorySiteHosts(directory()));
+        transports.registerHosts("service", () -> nats.isUsable() ? new PlacementSiteHosts(bus()) : null);
+        transports.registerHosts("directory", () -> new DirectorySiteHosts(directory()));
     }
 
     /** How servers talk to each other. */
@@ -108,7 +106,7 @@ public class NetworkLayer {
         if (hosts == null) {
             synchronized (this) {
                 if (hosts == null) {
-                    hosts = choose("placement", transports::hosts, List.of(SERVICE, DIRECTORY), "site host chooser");
+                    hosts = choose("placement", transports::hosts, List.of("service", "directory"), "site host chooser");
                 }
             }
         }
@@ -144,7 +142,6 @@ public class NetworkLayer {
                 return chosen.get();
             }
 
-            // Said out loud, because falling back quietly is how a network runs a season on the wrong one.
             log.warn("No {} named '{}' could be used, falling back", describedAs, named).submit();
         }
 

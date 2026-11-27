@@ -1,7 +1,7 @@
 {
-  "hub": { "replicas": 1, "buffer": { "bufferSize": 1, "minReplicas": 1, "maxReplicas": 2 }, "counters": { "players": 200 } },
-  "resource": { "replicas": 1, "counters": { "players": 500 } },
-  "camp": { "replicas": 1, "buffer": { "bufferSize": 1, "minReplicas": 1, "maxReplicas": 100 }, "counters": { "camp-slots": 10 } },
-  "dungeon": { "replicas": 1, "buffer": { "bufferSize": 1, "minReplicas": 1, "maxReplicas": 20 }, "counters": { "players": 100 } },
-  "event": { "replicas": 0, "counters": { "players": 200 } }
+  "hub": { "replicas": 1, "buffer": { "bufferSize": 1, "minReplicas": 1, "maxReplicas": 2 }, "counters": { "players": 200, "camp-slots": 0 } },
+  "resource": { "replicas": 1, "counters": { "players": 500, "camp-slots": 0 } },
+  "camp": { "replicas": 1, "buffer": { "bufferSize": 1, "minReplicas": 1, "maxReplicas": 100 }, "counters": { "players": 200, "camp-slots": 10 } },
+  "dungeon": { "replicas": 1, "buffer": { "bufferSize": 1, "minReplicas": 1, "maxReplicas": 20 }, "counters": { "players": 100, "camp-slots": 0 } },
+  "event": { "replicas": 0, "counters": { "players": 200, "camp-slots": 0 } }
 }

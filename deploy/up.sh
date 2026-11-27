@@ -6,7 +6,9 @@ cd "$(dirname "$0")"
 
 CLUSTER=${CLUSTER:-bpvp}
 NS=bpvp
-IMAGE=${BPVP_IMAGE:-ghcr.io/betterpvp/server:camps-main}
+TAG=${BPVP_TAG:-network-preview}
+IMAGE=${BPVP_IMAGE:-ghcr.io/betterpvp/server:$TAG}
+SERVICES=${SERVICES:-orchestration-service clans-service ledger-service}
 SERVER_MEMORY=${SERVER_MEMORY:-3Gi}
 ROLES=${ROLES:-hub resource camp dungeon event}
 K3S_IMAGE=rancher/k3s:v1.34.13-k3s1
@@ -16,7 +18,7 @@ NATS_VERSION=2.15.3
 CNPG_VERSION=0.29.2
 CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/bpvp-deploy
 
-for tool in docker k3d kubectl helm git; do
+for tool in docker k3d kubectl helm git jq; do
   command -v "$tool" >/dev/null || { echo "$tool is not installed" >&2; exit 1; }
 done
 
@@ -31,9 +33,13 @@ kubectl config use-context "k3d-$CLUSTER" >/dev/null
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl create namespace shulker-system --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-step "Image $IMAGE"
+service_image() { echo "ghcr.io/betterpvp/$1:${SERVICE_TAG:-$TAG}"; }
+
+step "Images"
 if [[ ${BPVP_IMAGE_LOCAL:-} == 1 ]]; then
-  k3d image import -c "$CLUSTER" "$IMAGE"
+  images=("$IMAGE")
+  for service in $SERVICES; do images+=("$(service_image "$service")"); done
+  k3d image import -c "$CLUSTER" "${images[@]}"
   pull_policy=Never
 else
   pull_policy=IfNotPresent
@@ -83,6 +89,14 @@ step "Postgres"
 kubectl apply -f manifests/postgres.yaml
 kubectl -n "$NS" wait --for=condition=Ready cluster/postgres --timeout=10m
 
+step "Services: $SERVICES"
+kubectl -n "$NS" create configmap orchestration-service --from-file=config.toml=manifests/services/orchestration-service.toml   --dry-run=client -o yaml | kubectl apply -f -
+for service in $SERVICES; do
+  [[ -f manifests/services/$service.yaml ]] || { echo "no manifests/services/$service.yaml" >&2; exit 1; }
+  sed -e "s|__IMAGE__|$(service_image "$service")|" -e "s|__PULL_POLICY__|$pull_policy|" "manifests/services/$service.yaml" |
+    kubectl apply -f -
+done
+
 step "Proxies and servers"
 kubectl apply -f manifests/network.yaml
 sed -e "s|__IMAGE__|$IMAGE|" -e "s|__PULL_POLICY__|$pull_policy|" -e "s|__SERVER_MEMORY__|$SERVER_MEMORY|" \
@@ -121,6 +135,8 @@ done
 
 step "Status"
 kubectl -n "$NS" get fleets
+echo
+kubectl -n "$NS" get deployments
 echo
 echo "Servers take a few minutes to start. deploy/check.sh waits for every fleet to be Ready."
 echo "Join at localhost:25565."

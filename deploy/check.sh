@@ -38,23 +38,55 @@ for fleet in proxy ${ROLES:-hub resource camp dungeon event}; do
   echo "ok: fleet $fleet has ${ready:-0} Ready and ${allocated:-0} Allocated"
 done
 
+# Every GameServer declares the counters core reports.
+for gs in $(kubectl -n "$NS" get gameservers -l betterpvp.net/role -o name); do
+  counters=$(kubectl -n "$NS" get "$gs" -o jsonpath='{.spec.counters}')
+  if [[ $counters != *'"players"'* || $counters != *'"camp-slots"'* ]]; then
+    echo "FAIL: $gs does not declare the players and camp-slots counters" >&2
+    exit 1
+  fi
+done
+echo "ok: every server declares the players and camp-slots counters"
+
+# The services run, and Placement may read GameServers and allocate them.
+for service in ${SERVICES:-orchestration-service clans-service ledger-service}; do
+  if ! kubectl -n "$NS" rollout status "deployment/$service" --timeout=300s >/dev/null; then
+    kubectl -n "$NS" logs "deployment/$service" --tail 30 >&2 || true
+    echo "FAIL: $service is not running" >&2
+    exit 1
+  fi
+  echo "ok: $service is running"
+done
+placement=system:serviceaccount:$NS:orchestration-service
+for check in "list gameservers.agones.dev" "create gameserverallocations.allocation.agones.dev"; do
+  # shellcheck disable=SC2086
+  [[ $(kubectl -n "$NS" auth can-i $check --as="$placement") == yes ]] || { echo "FAIL: Placement cannot $check" >&2; exit 1; }
+done
+echo "ok: Placement can list GameServers and allocate them"
+
 # The proxies turn everyone away while there is no hub, so the rest needs one.
 [[ " ${ROLES:-hub} " == *" hub "* ]] || exit 0
 
+# Every proxy adds a Ready hub to its server directory a few seconds later, so joining players land on one.
+for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/component=proxy -o name); do
+  for _ in $(seq 30); do
+    kubectl -n "$NS" logs "$pod" -c proxy 2>/dev/null | grep -q "Added server 'hub-" && continue 2
+    sleep 5
+  done
+  echo "FAIL: $pod has not added a hub server" >&2
+  exit 1
+done
+echo "ok: every proxy has a hub server to send players to"
+
 # A server list ping through the load balancer, which only a proxy answers.
 py=$(command -v python3 || command -v python) || { echo "python is needed for the ping" >&2; exit 1; }
-status=$("$py" "$(dirname "$0")/ping.py" 127.0.0.1 25565 2>&1 || true)
+for _ in $(seq 12); do
+  status=$("$py" "$(dirname "$0")/ping.py" 127.0.0.1 25565 2>&1 || true)
+  [[ $status == *'"name"'* ]] && break
+  sleep 5
+done
 if [[ $status != *'"name"'* ]]; then
   echo "FAIL: localhost:25565 did not answer a server list ping: $status" >&2
   exit 1
 fi
 echo "ok: localhost:25565 answers through a proxy: $status"
-
-# Every proxy has added a hub to its server directory, so joining players land on one.
-for pod in $(kubectl -n "$NS" get pods -l app.kubernetes.io/component=proxy -o name); do
-  if ! kubectl -n "$NS" logs "$pod" -c proxy 2>/dev/null | grep -q "Added server 'hub-"; then
-    echo "FAIL: $pod has not added a hub server" >&2
-    exit 1
-  fi
-done
-echo "ok: every proxy has a hub server to send players to"

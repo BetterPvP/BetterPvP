@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clans-service
+  namespace: bpvp
+spec:
+  # One writer keeps clan changes in order.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: clans-service
+  template:
+    metadata:
+      labels:
+        app: clans-service
+    spec:
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: clans-service
+          image: __IMAGE__
+          imagePullPolicy: __PULL_POLICY__
+          env:
+            - name: NATS_URL
+              value: nats://nats:4222
+            - name: NATS_PREFIX
+              value: bpvp
+            - name: DATABASE_URL
+              value: jdbc:postgresql://postgres-rw:5432/betterpvp
+            - name: DATABASE_USER
+              value: betterpvp
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-app
+                  key: password
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 384Mi

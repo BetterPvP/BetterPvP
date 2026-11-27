@@ -11,6 +11,7 @@ One command runs the whole network on your machine in a k3d cluster:
 | CloudNativePG | chart 0.29.2, one Postgres instance |
 | Velocity | 2 proxies, on `localhost:25565` |
 | Paper | the server image, one fleet per role |
+| Services | Placement (`orchestration-service`), `clans-service`, `ledger-service` |
 
 ## Needs
 
@@ -33,8 +34,11 @@ It creates the cluster `bpvp`, installs everything and starts the fleets. Run it
 
 | Variable | Default | What it is |
 |---|---|---|
-| `BPVP_IMAGE` | `ghcr.io/betterpvp/server:camps-main` | The server image. Any tag CI pushed, such as a commit |
-| `BPVP_IMAGE_LOCAL` | | `1` to use an image built on this machine instead of pulling it |
+| `BPVP_TAG` | `network-preview` | The tag of every image. Any tag CI pushed, such as a commit |
+| `BPVP_IMAGE` | `ghcr.io/betterpvp/server:$BPVP_TAG` | The server image, when it differs |
+| `SERVICES` | `orchestration-service clans-service ledger-service` | The services to run |
+| `SERVICE_TAG` | `$BPVP_TAG` | The service images' tag, when it differs |
+| `BPVP_IMAGE_LOCAL` | | `1` to use images built on this machine instead of pulling them |
 | `GHCR_USER`, `GHCR_TOKEN` | | A GitHub login that can read the image. Save the token with the team's secrets |
 | `ASSETS_BUCKET`, `ASSETS_AWS_ACCESS_KEY_ID`, `ASSETS_AWS_SECRET_ACCESS_KEY`, `ASSETS_RESTIC_PASSWORD` | | Read-only build assets access. Unset, servers start without assets |
 | `SERVER_MEMORY` | `3Gi` | Memory limit of each Paper server |
@@ -70,6 +74,22 @@ Change a fleet on its `MinecraftServerFleet`, never on the Agones `Fleet`, becau
 Servers stay healthy for Agones while Paper runs, so a slow start or a long tick never gets one deleted.
 
 The proxies turn every connection away, server list pings too, while no hub is Ready.
+
+## Services
+
+Each runs one Deployment in `bpvp`, from `manifests/services/<name>.yaml`. The `Service images` workflow pushes `ghcr.io/betterpvp/<name>` for each one on the branch.
+
+| Service | What it needs here |
+|---|---|
+| `orchestration-service` | Placement, on NATS. `manifests/services/orchestration-service.toml` is its config. Its service account may list GameServers and create GameServerAllocations in `bpvp` |
+| `clans-service` | One replica, so clan changes stay in order. NATS and the `betterpvp` database |
+| `ledger-service` | NATS and its own `ledger` database |
+
+Every service and server uses the NATS prefix `bpvp`. Change it in all of them at once.
+
+A new service, such as Sessions: add `manifests/services/<name>.yaml` with `__IMAGE__` and `__PULL_POLICY__` where the image goes, and add it to `SERVICES`. The workflow already builds `sessions-service` once the module exists. Other names go in its list.
+
+Each server's name (`core.info.server`) is its GameServer's name, which Placement sends camps to.
 
 ## Look around
 

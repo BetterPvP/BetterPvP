@@ -18,6 +18,7 @@ import me.mykindos.betterpvp.core.framework.blockbreak.resolver.DefaultBlockBrea
 import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
 import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerProvider;
 import me.mykindos.betterpvp.core.framework.net.NetModule;
+import me.mykindos.betterpvp.core.framework.role.RoleGate;
 import me.mykindos.betterpvp.core.framework.server.CrossServerMessageService;
 import me.mykindos.betterpvp.core.framework.server.VelocityCrossServerMessageService;
 import me.mykindos.betterpvp.core.framework.server.network.NetworkPlayerCountService;
@@ -38,6 +39,7 @@ public class CoreInjectorModule extends AbstractModule {
     @Override
     protected void configure() {
         bind(Core.class).toInstance(plugin);
+        bind(RoleGate.class).toInstance(RoleGate.current());
 
         install(new NetModule());
         install(new SiteModule());

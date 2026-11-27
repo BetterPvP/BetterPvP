@@ -7,6 +7,8 @@ import io.lumine.mythic.bukkit.events.MythicMobItemGenerateEvent;
 import io.lumine.mythic.core.utils.jnbt.Tag;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapter;
+import me.mykindos.betterpvp.core.framework.role.RunsOn;
+import me.mykindos.betterpvp.core.framework.role.ServerRole;
 import me.mykindos.betterpvp.core.item.BaseItem;
 import me.mykindos.betterpvp.core.item.ItemFactory;
 import me.mykindos.betterpvp.core.item.ItemInstance;
@@ -17,6 +19,7 @@ import org.bukkit.event.Listener;
 import java.util.Map;
 
 @CustomLog
+@RunsOn({ServerRole.RESOURCE, ServerRole.DUNGEON, ServerRole.EVENT})
 @PluginAdapter("MythicMobs")
 @BPvPListener
 @Singleton

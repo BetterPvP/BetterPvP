@@ -9,6 +9,7 @@ import me.mykindos.betterpvp.ledger.LedgerReceipt;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -25,6 +26,9 @@ public interface ClanBank {
                                                            long amount, @NotNull String reason) {
         return post(List.of(new Movement(from, to, amount, reason)), null);
     }
+
+    /** Brings the balances of clans this server just loaded in line with wherever their coins are kept. */
+    void sync(@NotNull Collection<Clan> clans);
 
     default @NotNull LedgerParty account(@NotNull Clan clan) {
         return LedgerParty.held(LedgerAccounts.clan(clan.getId()), new LedgerBalance() {

@@ -10,7 +10,7 @@ import me.mykindos.betterpvp.clans.clans.events.ClanDisbandEvent;
 import me.mykindos.betterpvp.clans.clans.events.ClanKickMemberEvent;
 import me.mykindos.betterpvp.clans.clans.events.MemberLeaveClanEvent;
 import me.mykindos.betterpvp.clans.clans.writer.ClanBank;
-import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
+import me.mykindos.betterpvp.clans.clans.core.storage.ClanInventories;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapter;
 import me.mykindos.betterpvp.core.item.ItemFactory;
@@ -42,11 +42,11 @@ public class ClansAuctionListener implements Listener {
 
     @Inject
     public ClansAuctionListener(ClanManager clanManager, ClientManager clientManager, ItemFactory itemFactory,
-                                ClanWriter writer, ClanBank bank) {
+                                ClanInventories inventories, ClanBank bank) {
         this.clanManager = clanManager;
         this.clientManager = clientManager;
         this.auctionManager = JavaPlugin.getPlugin(Shops.class).getInjector().getInstance(AuctionManager.class);
-        this.auctionManager.setDeliveryService(new ClansAuctionDeliveryService(clanManager, itemFactory, writer, bank));
+        this.auctionManager.setDeliveryService(new ClansAuctionDeliveryService(clanManager, itemFactory, inventories, bank));
     }
 
     @EventHandler

@@ -33,10 +33,7 @@ public class CancelAllAuctionsCommand extends Command {
             auction.setCancelled(true);
             auctionManager.getAuctionRepository().setCancelled(auction, true);
 
-            if (auctionManager.getDeliveryService().deliverAuction(auction.getSeller(), auction)) {
-                auctionManager.getAuctionRepository().setDelivered(auction, true);
-
-            }
+            auctionManager.deliverAuction(auction.getSeller(), auction);
         });
 
         auctionManager.getActiveAuctions().clear();

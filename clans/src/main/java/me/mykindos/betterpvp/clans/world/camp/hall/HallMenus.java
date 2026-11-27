@@ -46,6 +46,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.ComponentLike;
 import net.kyori.adventure.text.format.NamedTextColor;
 import me.mykindos.betterpvp.ledger.LedgerAccounts;
+import me.mykindos.betterpvp.ledger.LedgerStatus;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
@@ -161,6 +162,11 @@ public class HallMenus {
             return;
         }
         ledger.move(LedgerParty.of(gamer), LedgerParty.system(LedgerAccounts.CAMP), amount, "camp.wage_fund").thenAccept(receipt -> {
+            if (receipt.getStatus() == LedgerStatus.INSUFFICIENT_FUNDS) {
+                refuse(player, "clans.camp.hall.wages.cannot_afford", CoinsTag.of(Component.text(
+                        UtilFormat.formatNumber((int) amount), NamedTextColor.YELLOW)));
+                return;
+            }
             if (!receipt.isPosted()) {
                 refuse(player, "core.ledger.unavailable");
                 return;

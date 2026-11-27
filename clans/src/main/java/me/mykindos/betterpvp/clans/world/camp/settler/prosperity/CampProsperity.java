@@ -3,6 +3,7 @@ package me.mykindos.betterpvp.clans.world.camp.settler.prosperity;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.clans.clans.events.ClanDisbandEvent;
+import me.mykindos.betterpvp.clans.clans.events.ClanDisbandedElsewhereEvent;
 import me.mykindos.betterpvp.clans.world.camp.Camps;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampTraits;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampWideTraits;
@@ -115,6 +116,11 @@ public class CampProsperity implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDisband(@NotNull ClanDisbandEvent event) {
+        store.delete(event.getClan().getId());
+    }
+
+    @EventHandler
+    public void onDisbandedElsewhere(@NotNull ClanDisbandedElsewhereEvent event) {
         store.delete(event.getClan().getId());
     }
 }

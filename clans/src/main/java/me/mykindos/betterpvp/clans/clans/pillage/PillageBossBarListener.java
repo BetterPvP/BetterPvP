@@ -6,6 +6,7 @@ import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.events.ClanDisbandEvent;
+import me.mykindos.betterpvp.clans.clans.events.ClanDisbandedElsewhereEvent;
 import me.mykindos.betterpvp.clans.clans.events.ClanKickMemberEvent;
 import me.mykindos.betterpvp.clans.clans.events.MemberJoinClanEvent;
 import me.mykindos.betterpvp.clans.clans.events.MemberLeaveClanEvent;
@@ -68,6 +69,14 @@ public class PillageBossBarListener implements Listener {
 
     @EventHandler(ignoreCancelled = true, priority = EventPriority.HIGHEST)
     private void onClanDisband(final ClanDisbandEvent event) {
+        removeBars(event.getClan(), event.getClan().asAudience());
+        for (Pillage pillage : this.clanManager.getPillageHandler().getPillagesBy(event.getClan())) {
+            pillage.setPillageFinishTime(System.currentTimeMillis());
+        }
+    }
+
+    @EventHandler
+    private void onClanDisbandedElsewhere(final ClanDisbandedElsewhereEvent event) {
         removeBars(event.getClan(), event.getClan().asAudience());
         for (Pillage pillage : this.clanManager.getPillageHandler().getPillagesBy(event.getClan())) {
             pillage.setPillageFinishTime(System.currentTimeMillis());

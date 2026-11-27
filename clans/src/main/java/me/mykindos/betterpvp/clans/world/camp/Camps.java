@@ -6,6 +6,7 @@ import lombok.CustomLog;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.events.ClanDisbandEvent;
+import me.mykindos.betterpvp.clans.clans.events.ClanDisbandedElsewhereEvent;
 import me.mykindos.betterpvp.core.client.events.ClientJoinEvent;
 import me.mykindos.betterpvp.core.config.Config;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
@@ -129,7 +130,17 @@ public class Camps implements Listener, SiteOwnership {
     /** A disbanded clan's camp goes with it, both the world it stood in and the record of what was in it. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDisband(@NotNull ClanDisbandEvent event) {
-        final SiteKey key = keyFor(event.getClan());
+        discard(event.getClan());
+    }
+
+    /** A clan disbanded on another server may still have its camp open here, which only this server can close. */
+    @EventHandler
+    public void onDisbandedElsewhere(@NotNull ClanDisbandedElsewhereEvent event) {
+        discard(event.getClan());
+    }
+
+    private void discard(@NotNull Clan clan) {
+        final SiteKey key = keyFor(clan);
         store.delete(key.getOwnerId());
 
         instances.forKey(key).forEach(instance -> instances.release(instance.getId(), true).exceptionally(ex -> {

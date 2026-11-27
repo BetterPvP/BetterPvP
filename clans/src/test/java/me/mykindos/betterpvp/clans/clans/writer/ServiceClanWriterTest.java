@@ -31,10 +31,12 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anySet;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -132,6 +134,34 @@ class ServiceClanWriterTest {
     }
 
     @Test
+    void aKillIsSentAsWhatItWasWorthSoKillsOnTwoServersBothCount() {
+        final Clan killer = clan(1L);
+        final Clan killed = clan(2L);
+
+        writer.killDominance(killer, new ClanEnemy(killed, 46), killed, new ClanEnemy(killer, 0), 6);
+
+        final ClanMutation sent = bus.lastMutation();
+        assertEquals(ClanOp.DOMINANCE_KILL, sent.getOp());
+        assertEquals(1L, sent.getClan());
+        assertEquals(2L, sent.getOther());
+        assertEquals(6.0, Double.parseDouble(sent.getValue()));
+    }
+
+    @Test
+    void aVaultSaveCompletesOnlyOnceTheServiceAnswers() {
+        final CompletableFuture<List<BusMessage>> answer = new CompletableFuture<>();
+        bus.pending = answer;
+        final Clan clan = mock(Clan.class, RETURNS_DEEP_STUBS);
+        when(clan.getId()).thenReturn(4L);
+
+        final CompletableFuture<Void> saved = writer.saveVault(clan);
+
+        assertFalse(saved.isDone());
+        answer.complete(List.of(bus.requests.getLast().replyWith(ClanReply.applied(2L).toPayload())));
+        assertTrue(saved.isDone());
+    }
+
+    @Test
     void theServiceStepsRanksInThePluginsOrder() {
         final List<String> pluginOrder = Arrays.stream(ClanMember.MemberRank.values())
                 .sorted(Comparator.comparingInt(ClanMember.MemberRank::getPrivilege))
@@ -153,6 +183,8 @@ class ServiceClanWriterTest {
         private final List<BusMessage> requests = new ArrayList<>();
         private final List<String> subscribed = new ArrayList<>();
         private ClanReply answer = ClanReply.applied(1L);
+        /** When set, the next request is answered by completing this instead. */
+        private CompletableFuture<List<BusMessage>> pending;
 
         ClanMutation lastMutation() {
             return ClanMutation.fromPayload(requests.getLast().getPayload());
@@ -165,6 +197,11 @@ class ServiceClanWriterTest {
         @Override
         public @NotNull CompletableFuture<List<BusMessage>> request(@NotNull BusMessage message, @NotNull Duration timeout) {
             requests.add(message);
+            if (pending != null) {
+                final CompletableFuture<List<BusMessage>> next = pending;
+                pending = null;
+                return next;
+            }
             if (answer == null) {
                 return CompletableFuture.completedFuture(List.of());
             }

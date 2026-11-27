@@ -25,7 +25,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * the other way round and never waited on.
  * <p>
  * Each record is written at the version it was read at, one write at a time per clan, so a record some other server
- * has written since is refused rather than overwritten.
+ * has written since is refused rather than overwritten. A refused record is read again, so this server holds what the
+ * other one wrote and its next write lands on top of it.
  */
 @Singleton
 @CustomLog
@@ -117,12 +118,27 @@ public class CampStore {
 
         return storage.write(Camps.keyFor(clanId), data, version)
                 .thenAccept(written -> versions.replace(clanId, version, written))
-                .exceptionally(ex -> {
+                .exceptionallyCompose(ex -> {
                     if (ex.getCause() instanceof StaleSiteRecordException) {
-                        log.error("Not writing the camp record for clan {}, it was written elsewhere since", clanId).submit();
-                    } else {
-                        log.error("Could not write the camp record for clan {}", clanId, ex).submit();
+                        log.warn("Not writing the camp record for clan {}, it was written elsewhere since. Reading it again",
+                                clanId).submit();
+                        return reread(clanId);
                     }
+                    log.error("Could not write the camp record for clan {}", clanId, ex).submit();
+                    return CompletableFuture.completedFuture(null);
+                });
+    }
+
+    private @NotNull CompletableFuture<Void> reread(long clanId) {
+        return storage.read(Camps.keyFor(clanId))
+                .thenAccept(found -> found.ifPresent(record -> {
+                    if (records.containsKey(clanId)) {
+                        records.put(clanId, record.as(Camp.class));
+                        versions.put(clanId, record.getVersion());
+                    }
+                }))
+                .exceptionally(ex -> {
+                    log.error("Could not read the camp record for clan {} again", clanId, ex).submit();
                     return null;
                 });
     }

@@ -36,20 +36,20 @@ class CampCoinsTest {
 
     @Test
     void ac25_takingNothingAlwaysSucceedsAndTakesNothing() {
-        assertTrue(coins.take(player, 0));
-        assertTrue(coins.take(player, -5));
+        assertTrue(coins.take(player, 0).join());
+        assertTrue(coins.take(player, -5).join());
         verify(gamer, never()).saveProperty(any(GamerProperty.class), any());
     }
 
     @Test
     void ac25_takingMoreThanTheyHaveFailsAndTakesNothing() {
-        assertFalse(coins.take(player, 1_001));
+        assertFalse(coins.take(player, 1_001).join());
         verify(gamer, never()).saveProperty(any(GamerProperty.class), any());
     }
 
     @Test
     void ac25_takingWhatTheyHaveTakesIt() {
-        assertTrue(coins.take(player, 300));
+        assertTrue(coins.take(player, 300).join());
         verify(gamer).saveProperty(GamerProperty.BALANCE, 700);
     }
 

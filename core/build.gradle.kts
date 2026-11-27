@@ -186,3 +186,18 @@ tasks.register<Test>("networkTest") {
     useJUnitPlatform()
     shouldRunAfter(tasks.test)
 }
+
+// The network and its fixtures, for the cross-service tests of modules that build on core
+val networkTestJar by tasks.registering(Jar::class) {
+    archiveClassifier.set("network-test")
+    from(networkTest.output, sourceSets.test.get().output)
+}
+val networkTestFixtures: Configuration by configurations.creating {
+    isCanBeConsumed = true
+    isCanBeResolved = false
+    extendsFrom(configurations[networkTest.implementationConfigurationName],
+        configurations[networkTest.runtimeOnlyConfigurationName])
+}
+artifacts {
+    add(networkTestFixtures.name, networkTestJar)
+}

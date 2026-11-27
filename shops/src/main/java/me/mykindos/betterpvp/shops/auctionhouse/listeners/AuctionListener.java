@@ -14,7 +14,8 @@ import me.mykindos.betterpvp.shops.auctionhouse.events.AuctionCreateEvent;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 
-import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 
 @BPvPListener
 @Singleton
@@ -31,25 +32,28 @@ public class AuctionListener implements Listener {
 
     @UpdateEvent(delay = 10000)
     public void processAuctions() {
-        Iterator<Auction> auctionIterator = auctionManager.getActiveAuctions().iterator();
-        while (auctionIterator.hasNext()) {
-            Auction auction = auctionIterator.next();
+        for (Auction auction : List.copyOf(auctionManager.getActiveAuctions())) {
             if (auction.isDelivered()) {
-                auctionIterator.remove();
+                auctionManager.getActiveAuctions().remove(auction);
                 continue;
             }
             if (auction.hasExpired() || auction.isCancelled()) {
-                if (auctionManager.deliverAuction(auction.getSeller(), auction)) {
-                    auctionIterator.remove();
-                }
+                removeOnceDelivered(auction, auctionManager.deliverAuction(auction.getSeller(), auction));
             } else if ((auction.isSold())) {
                 if (auction.getTransaction() != null) {
-                    if (auctionManager.deliverAuction(auction.getTransaction().getBuyer(), auction)) {
-                        auctionIterator.remove();
-                    }
+                    removeOnceDelivered(auction,
+                            auctionManager.deliverAuction(auction.getTransaction().getBuyer(), auction));
                 }
             }
         }
+    }
+
+    private void removeOnceDelivered(Auction auction, CompletableFuture<Boolean> delivery) {
+        delivery.thenAccept(delivered -> {
+            if (delivered) {
+                auctionManager.getActiveAuctions().remove(auction);
+            }
+        });
     }
 
     @EventHandler

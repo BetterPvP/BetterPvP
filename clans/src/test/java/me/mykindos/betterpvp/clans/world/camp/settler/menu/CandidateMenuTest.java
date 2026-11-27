@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 
 import static me.mykindos.betterpvp.clans.world.camp.settler.menu.MenuProbe.click;
@@ -86,7 +87,7 @@ class CandidateMenuTest {
         when(cards.getTraits()).thenReturn(traits);
         when(cards.allows(player, SITE, SettlerAction.HIRE)).thenReturn(true);
         when(recruitment.price(SITE, candidate)).thenReturn(4_500L);
-        when(recruitment.hire(any(), any(), any())).thenReturn(SettlerResult.done(candidate.getSettler()));
+        when(recruitment.hire(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(SettlerResult.done(candidate.getSettler())));
         when(recruitment.turnAway(any(), any(), any())).thenReturn(SettlerResult.done(candidate.getSettler()));
     }
 
@@ -162,7 +163,7 @@ class CandidateMenuTest {
     @Test
     void ac20_aRefusedHireTellsTheReasonAndStays() {
         final SettlerResult broke = SettlerResult.refused("clans.settler.recruit.cannot_afford");
-        when(recruitment.hire(any(), any(), any())).thenReturn(broke);
+        when(recruitment.hire(any(), any(), any())).thenReturn(CompletableFuture.completedFuture(broke));
 
         click(menu(previous), HIRE, player);
 

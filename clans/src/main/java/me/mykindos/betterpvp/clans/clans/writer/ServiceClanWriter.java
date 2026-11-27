@@ -172,14 +172,15 @@ public class ServiceClanWriter implements ClanWriter {
     }
 
     @Override
-    public void saveVault(@NotNull Clan clan) {
-        send(mutation(ClanOp.VAULT, clan).value(clan.getCore().getVault().serialize()).build());
+    public @NotNull CompletableFuture<Void> saveVault(@NotNull Clan clan) {
+        return send(mutation(ClanOp.VAULT, clan).value(clan.getCore().getVault().serialize()).build())
+                .thenApply(reply -> null);
     }
 
     @Override
     public @NotNull CompletableFuture<Void> saveMailbox(@NotNull Clan clan) {
-        send(mutation(ClanOp.MAILBOX, clan).value(clan.getCore().getMailbox().serialize()).build());
-        return CompletableFuture.completedFuture(null);
+        return send(mutation(ClanOp.MAILBOX, clan).value(clan.getCore().getMailbox().serialize()).build())
+                .thenApply(reply -> null);
     }
 
     @Override
@@ -200,17 +201,28 @@ public class ServiceClanWriter implements ClanWriter {
                 .build());
     }
 
+    /** Sent as the kill's worth rather than either side's result, so kills on two servers at once both count. */
+    @Override
+    public void killDominance(@NotNull IClan killer, @NotNull ClanEnemy killerEnemy, @NotNull IClan killed,
+                              @NotNull ClanEnemy killedEnemy, double amount) {
+        send(ClanMutation.builder().op(ClanOp.DOMINANCE_KILL).clan(killer.getId())
+                .other(killed.getId())
+                .value(Double.toString(amount))
+                .build());
+    }
+
     private static @NotNull ClanMutation.ClanMutationBuilder mutation(@NotNull ClanOp op, @NotNull Clan clan) {
         return ClanMutation.builder().op(op).clan(clan.getId());
     }
 
-    private void send(@NotNull ClanMutation mutation) {
+    /** Completes with the service's answer. A write it refused is undone by reading the clans it touched again. */
+    private @NotNull CompletableFuture<ClanReply> send(@NotNull ClanMutation mutation) {
         final List<Long> affected = mutation.getOther() == null
                 ? List.of(mutation.getClan())
                 : List.of(mutation.getClan(), mutation.getOther());
 
-        bus.request(BusMessage.of(ClanTopics.MUTATE, mutation.toPayload()), Duration.ofSeconds(3))
-                .whenComplete((replies, error) -> {
+        return bus.request(BusMessage.of(ClanTopics.MUTATE, mutation.toPayload()), Duration.ofSeconds(3))
+                .handle((replies, error) -> {
                     final ClanReply reply = error != null || replies.isEmpty()
                             ? ClanReply.refused("The Clans service did not answer")
                             : ClanReply.fromPayload(replies.getFirst().getPayload());
@@ -219,6 +231,7 @@ public class ServiceClanWriter implements ClanWriter {
                                 mutation.getClan(), reply.getError()).submit();
                         feed.refresh(affected, ClanChangeFeed.partsOf(mutation.getOp()));
                     }
+                    return reply;
                 });
     }
 }

@@ -7,10 +7,13 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
-import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
+import me.mykindos.betterpvp.clans.clans.core.storage.ClanInventories;
 import me.mykindos.betterpvp.core.item.ItemFactory;
 import me.mykindos.betterpvp.core.menu.Windowed;
 import me.mykindos.betterpvp.core.utilities.UtilItem;
+import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -50,19 +53,39 @@ public final class ClanMailbox {
         return UtilItem.serializeItemStackList(new ArrayList<>(contents));
     }
 
+    /** Shows the mailbox once no one else has it open, here or on another server. */
     public void show(Player player, ItemFactory itemFactory, Windowed previous) throws IllegalStateException {
         Preconditions.checkState(!isLocked(), "Clan mailbox is locked");
         lockedBy = player.getName();
-        new GuiClanMailbox(this, itemFactory, previous).show(player).addCloseHandler(() -> {
-            final ClanWriter writer = JavaPlugin.getPlugin(Clans.class).getInjector().getInstance(ClanWriter.class);
-            writer.saveMailbox(clan).whenComplete((unused, throwable) -> {
-                if(throwable != null) {
-                    log.error("Failed to update clan mailbox", throwable).submit();
-                    return;
-                }
-
+        final ClanInventories inventories = JavaPlugin.getPlugin(Clans.class).getInjector()
+                .getInstance(ClanInventories.class);
+        inventories.open(clan, ClanInventories.Inventory.MAILBOX, player.getName()).thenAccept(answer -> {
+            if (!answer.isTaken()) {
                 lockedBy = null;
-            });
+                if (answer.getHolder() != null) {
+                    UtilMessage.message(player, "clans.prefix", "clans.core.mailbox.locked",
+                            Component.text(answer.getHolder(), NamedTextColor.DARK_RED));
+                } else {
+                    UtilMessage.message(player, "clans.prefix", "clans.core.storage.unavailable");
+                }
+                return;
+            }
+            if (!player.isOnline()) {
+                close(inventories);
+                return;
+            }
+            new GuiClanMailbox(this, itemFactory, previous).show(player).addCloseHandler(() -> close(inventories));
+        });
+    }
+
+    private void close(@NotNull ClanInventories inventories) {
+        inventories.close(clan, ClanInventories.Inventory.MAILBOX).whenComplete((unused, throwable) -> {
+            if (throwable != null) {
+                log.error("Failed to update clan mailbox", throwable).submit();
+                return;
+            }
+
+            lockedBy = null;
         });
     }
 

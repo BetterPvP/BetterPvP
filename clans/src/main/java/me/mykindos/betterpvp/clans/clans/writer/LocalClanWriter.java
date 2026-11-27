@@ -118,8 +118,9 @@ public class LocalClanWriter implements ClanWriter {
     }
 
     @Override
-    public void saveVault(@NotNull Clan clan) {
+    public @NotNull CompletableFuture<Void> saveVault(@NotNull Clan clan) {
         repository.updateClanVault(clan);
+        return CompletableFuture.completedFuture(null);
     }
 
     @Override
@@ -140,5 +141,12 @@ public class LocalClanWriter implements ClanWriter {
     @Override
     public void setDominance(@NotNull IClan clan, @NotNull ClanEnemy enemy) {
         repository.updateDominance(clan, enemy);
+    }
+
+    @Override
+    public void killDominance(@NotNull IClan killer, @NotNull ClanEnemy killerEnemy, @NotNull IClan killed,
+                              @NotNull ClanEnemy killedEnemy, double amount) {
+        repository.updateDominance(killed, killedEnemy);
+        repository.updateDominance(killer, killerEnemy);
     }
 }

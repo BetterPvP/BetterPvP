@@ -2,6 +2,7 @@ package me.mykindos.betterpvp.clans.world.camp.upgrade;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import lombok.CustomLog;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.world.camp.Camp;
 import me.mykindos.betterpvp.clans.world.camp.CampConfig;
@@ -41,6 +42,7 @@ import me.mykindos.betterpvp.core.utilities.model.tag.CoinsTag;
  * the fund plus what contributors could still pay today.
  */
 @Singleton
+@CustomLog
 public class WagePolicy {
 
     public static final String ID = "wage_policy";
@@ -153,6 +155,12 @@ public class WagePolicy {
             final Gamer gamer = gamer(player);
             ledger.move(LedgerParty.of(gamer), LedgerParty.system(LedgerAccounts.CAMP), share, "camp.wages").thenAccept(receipt -> {
                 if (!receipt.isPosted()) {
+                    log.warn("Could not take {}'s wage share of {} for camp {}: {}", player.getName(), share,
+                            key.getOwnerId(), receipt.getStatus()).submit();
+                    UtilMessage.plain(player, ChatIcon.NEWS.line(Translations.component(
+                            "clans.camp.upgrade.wage_policy.share_failed",
+                            CoinsTag.of(Component.text(UtilFormat.formatNumber((int) (long) share), NamedTextColor.WHITE)))
+                            .color(NamedTextColor.RED)));
                     return;
                 }
                 camp.getWageContributions().merge(member, share, Long::sum);

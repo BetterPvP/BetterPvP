@@ -8,6 +8,7 @@ import lombok.Getter;
 import lombok.Setter;
 import me.mykindos.betterpvp.clans.achievements.loader.ClansAchievementLoader;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
+import me.mykindos.betterpvp.clans.clans.writer.ClanBank;
 import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.clans.clans.map.MapHandler;
 import me.mykindos.betterpvp.clans.clans.core.EnergyItem;
@@ -129,6 +130,7 @@ public class Clans extends BPvPPlugin {
 
             clanManager = injector.getInstance(ClanManager.class);
             clanManager.loadFromList(clanManager.getRepository().getAll());
+            injector.getInstance(ClanBank.class).sync(clanManager.getObjects().values());
 
             var clansSidebar = injector.getInstance(ClansSidebarListener.class);
             var sidebarController = injector.getInstance(SidebarController.class);

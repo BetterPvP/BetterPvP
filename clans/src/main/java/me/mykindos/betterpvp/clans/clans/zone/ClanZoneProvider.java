@@ -5,6 +5,7 @@ import com.google.inject.Singleton;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.events.ClanDisbandEvent;
+import me.mykindos.betterpvp.clans.clans.events.ClanDisbandedElsewhereEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.world.zone.Zone;
 import me.mykindos.betterpvp.core.world.zone.ZoneManager;
@@ -95,6 +96,11 @@ public class ClanZoneProvider implements ZoneProvider, Listener {
 
     @EventHandler
     public void onDisband(ClanDisbandEvent event) {
+        zones.remove(event.getClan().getId());
+    }
+
+    @EventHandler
+    public void onDisbandedElsewhere(ClanDisbandedElsewhereEvent event) {
         zones.remove(event.getClan().getId());
     }
 }

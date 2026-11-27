@@ -18,6 +18,12 @@ public final class ProxyConfig {
     private final String packDatabaseUrl;
     private final String packDatabaseUser;
     private final String packDatabasePassword;
+    private final boolean networkEnabled;
+    private final String natsUrl;
+    private final String natsToken;
+    private final String networkPrefix;
+    private final String proxyName;
+    private final String hubSite;
 
     private ProxyConfig(
             String orchestrationBaseUrl,
@@ -26,7 +32,13 @@ public final class ProxyConfig {
             String packChannel,
             String packDatabaseUrl,
             String packDatabaseUser,
-            String packDatabasePassword
+            String packDatabasePassword,
+            boolean networkEnabled,
+            String natsUrl,
+            String natsToken,
+            String networkPrefix,
+            String proxyName,
+            String hubSite
     ) {
         this.orchestrationBaseUrl = orchestrationBaseUrl;
         this.orchestrationRequestTimeoutMs = orchestrationRequestTimeoutMs;
@@ -35,6 +47,12 @@ public final class ProxyConfig {
         this.packDatabaseUrl = packDatabaseUrl;
         this.packDatabaseUser = packDatabaseUser;
         this.packDatabasePassword = packDatabasePassword;
+        this.networkEnabled = networkEnabled;
+        this.natsUrl = natsUrl;
+        this.natsToken = natsToken;
+        this.networkPrefix = networkPrefix;
+        this.proxyName = proxyName;
+        this.hubSite = hubSite;
     }
 
     public static ProxyConfig load(Path dataDirectory) throws IOException {
@@ -56,7 +74,14 @@ public final class ProxyConfig {
                 result.getString("resourcepack.channel", () -> "production"),
                 result.getString("resourcepack.database_url", () -> "jdbc:postgresql://127.0.0.1:5432/betterpvp"),
                 result.getString("resourcepack.database_user", () -> ""),
-                result.getString("resourcepack.database_password", () -> "")
+                result.getString("resourcepack.database_password", () -> ""),
+                result.getBoolean("network.enabled", () -> false),
+                result.getString("network.nats_url", () -> "nats://127.0.0.1:4222"),
+                result.getString("network.nats_token", () -> ""),
+                result.getString("network.prefix", () -> "bpvp"),
+                // A pod's hostname is its name, which is unique among the proxies.
+                result.getString("network.proxy_name", () -> System.getenv().getOrDefault("HOSTNAME", "proxy")),
+                result.getString("network.hub_site", () -> "hub")
         );
     }
 
@@ -86,6 +111,31 @@ public final class ProxyConfig {
 
     public String packDatabasePassword() {
         return packDatabasePassword;
+    }
+
+    public boolean networkEnabled() {
+        return networkEnabled;
+    }
+
+    public String natsUrl() {
+        return natsUrl;
+    }
+
+    public String natsToken() {
+        return natsToken;
+    }
+
+    public String networkPrefix() {
+        return networkPrefix;
+    }
+
+    /** Blank means the pod's hostname. */
+    public String proxyName() {
+        return proxyName.isBlank() ? System.getenv().getOrDefault("HOSTNAME", "proxy") : proxyName;
+    }
+
+    public String hubSite() {
+        return hubSite;
     }
 
     private static void copyBundledConfig(Path path) throws IOException {

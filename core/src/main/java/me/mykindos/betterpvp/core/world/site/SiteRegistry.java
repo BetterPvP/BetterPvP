@@ -100,7 +100,12 @@ public class SiteRegistry implements Reloadable {
             return WorldSource.own(folder, world.getString("from"));
         }
 
-        log.warn("Site '{}' has a 'world' block with no adopt, clone or own - skipping", id).submit();
+        final String slime = world.getString("slime");
+        if (slime != null) {
+            return WorldSource.slime(slime, world.getString("from"));
+        }
+
+        log.warn("Site '{}' has a 'world' block with no adopt, clone, own or slime - skipping", id).submit();
         return null;
     }
 

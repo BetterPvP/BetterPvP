@@ -23,7 +23,8 @@ cleanup
 psql "CREATE DATABASE $db"
 nats=()
 if "${compose[@]}" config --services | grep -qx nats; then
-  nats=(-e "BPVP_NATS_URL=nats://nats:4222")
+  nats=(-e "BPVP_CONFIG_SET=plugins/Core/config.yml .core.nats.enabled true
+plugins/Core/config.yml .core.nats.url nats://nats:4222")
 fi
 
 docker run -d --name "$name" --network "$network" -e BPVP_ROLE=all -e BPVP_SERVER_NAME=check \

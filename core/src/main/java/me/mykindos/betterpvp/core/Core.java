@@ -20,9 +20,11 @@ import me.mykindos.betterpvp.core.coretips.CoreTipLoader;
 import me.mykindos.betterpvp.core.database.Database;
 import me.mykindos.betterpvp.core.framework.BPvPPlugin;
 import me.mykindos.betterpvp.core.framework.net.NetworkLayer;
+import me.mykindos.betterpvp.core.world.site.storage.LocalSiteRecordImport;
 import me.mykindos.betterpvp.core.world.site.storage.SiteStorage;
 import me.mykindos.betterpvp.core.framework.CurrentMode;
 import me.mykindos.betterpvp.core.framework.adapter.Adapters;
+import me.mykindos.betterpvp.core.framework.agones.AgonesLifecycle;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapter;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapters;
 import me.mykindos.betterpvp.core.framework.events.ServerStartEvent;
@@ -112,6 +114,7 @@ public class Core extends BPvPPlugin {
         database.getConnection().runDatabaseMigrations(getClass().getClassLoader(), "classpath:core-migrations/postgres/", "global");
 
         setupServerAndSeason();
+        injector.getInstance(LocalSiteRecordImport.class).run();
         injector.injectMembers(this);
 
         final ItemLoader itemLoader = new ItemLoader(this);
@@ -218,6 +221,8 @@ public class Core extends BPvPPlugin {
 
         injector.getInstance(SiteStorage.class).close();
         log.info("Site storage closed").submit();
+
+        injector.getInstance(AgonesLifecycle.class).shutdown();
 
         log.info("Closing logger factory...").submit();
         LoggerFactory.getInstance().close();

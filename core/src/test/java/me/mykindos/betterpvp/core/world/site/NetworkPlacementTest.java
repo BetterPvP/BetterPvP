@@ -2,9 +2,11 @@ package me.mykindos.betterpvp.core.world.site;
 
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.framework.net.Arrival;
+import me.mykindos.betterpvp.core.framework.net.DirectorySiteHosts;
 import me.mykindos.betterpvp.core.framework.net.LocalSiteDirectory;
 import me.mykindos.betterpvp.core.framework.net.PlayerTransfer;
 import me.mykindos.betterpvp.core.framework.net.RemoteInstance;
+import me.mykindos.betterpvp.core.framework.net.SiteHosts;
 import me.mykindos.betterpvp.core.server.Realm;
 import me.mykindos.betterpvp.core.server.Season;
 import me.mykindos.betterpvp.core.server.Server;
@@ -55,6 +57,7 @@ class NetworkPlacementTest {
             """;
 
     private Realm originalRealm;
+    private SiteRegistry registry;
     private SiteInstances instances;
     private LocalSiteDirectory directory;
     private RecordingTransfer transfers;
@@ -81,14 +84,14 @@ class NetworkPlacementTest {
         originalRealm = Core.getCurrentRealm();
         Core.setCurrentRealm(new Realm(1, new Server(1, HERE), new Season(1, "test", LocalDate.now())));
 
-        final SiteRegistry registry = new SiteRegistry(mock(Core.class));
+        registry = new SiteRegistry(mock(Core.class));
         registry.load(YamlConfiguration.loadConfiguration(new StringReader(CATALOGUE)));
 
         instances = mock(SiteInstances.class);
         directory = new LocalSiteDirectory();
         transfers = new RecordingTransfer();
-        placement = new NetworkPlacement(mock(Core.class), registry, instances, directory, transfers,
-                mock(LocalPlacement.class));
+        placement = new NetworkPlacement(mock(Core.class), registry, instances, directory,
+                new DirectorySiteHosts(directory), transfers, mock(LocalPlacement.class));
     }
 
     @AfterEach
@@ -247,5 +250,36 @@ class NetworkPlacementTest {
         assertTrue(placement.isLocal(registry.get("hub").orElseThrow()));
         assertFalse(placement.isLocal(registry.get("pinned").orElseThrow()));
         assertNotEquals(HERE, placement.hostFor(registry.get("pinned").orElseThrow()));
+    }
+
+    @Test
+    @DisplayName("a camp opens on the server Placement chose for it, even one that was only just allocated")
+    void ownedSiteGoesWherePlacementSays() {
+        final List<String> asked = new ArrayList<>();
+        final SiteHosts placementService = (siteId, ownerId, owned, asker) -> {
+            asked.add(siteId + ":" + ownerId + ":" + owned + ":" + asker);
+            return CompletableFuture.completedFuture(Optional.of("camp-7"));
+        };
+        final NetworkPlacement placed = new NetworkPlacement(mock(Core.class), registry, instances, directory,
+                placementService, transfers, mock(LocalPlacement.class));
+
+        final SiteHandle handle = placed.locate(SiteKey.of("camp", 42L), Party.solo(UUID.randomUUID())).join();
+
+        assertEquals(List.of("camp:42:true:" + HERE), asked);
+        assertEquals("camp-7", handle.getServer());
+        assertEquals(SiteHandle.PENDING, handle.getInstanceId(), "the camp opens there once the party arrives");
+    }
+
+    @Test
+    @DisplayName("when nobody can decide where a camp lives, the party stays where it is")
+    void undecidedHostRefuses() {
+        final SiteHosts unreachable = (siteId, ownerId, owned, asker) -> CompletableFuture.completedFuture(Optional.empty());
+        final NetworkPlacement placed = new NetworkPlacement(mock(Core.class), registry, instances, directory,
+                unreachable, transfers, mock(LocalPlacement.class));
+
+        final CompletableFuture<SiteHandle> located = placed.locate(SiteKey.of("camp", 42L), Party.solo(UUID.randomUUID()));
+
+        assertTrue(located.isCompletedExceptionally());
+        assertTrue(transfers.sent.isEmpty());
     }
 }

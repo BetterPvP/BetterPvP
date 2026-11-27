@@ -2,7 +2,7 @@
 
 `ghcr.io/betterpvp/server` is the one Paper image every server runs. `BPVP_ROLE` picks the role when the container starts.
 
-The `Server image` workflow builds it on every push to `camps/main` and every pull request from this repository, and pushes three tags:
+The `Server image` workflow builds it on every push to `camps/main` and `network/preview` and every pull request from this repository, and pushes three tags:
 
 | Tag | Example |
 |---|---|

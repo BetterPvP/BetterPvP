@@ -2,16 +2,23 @@ package me.mykindos.betterpvp.core.framework.net;
 
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.config.ExtendedYamlConfiguration;
+import me.mykindos.betterpvp.core.logging.LogAppender;
+import me.mykindos.betterpvp.core.logging.LoggerFactory;
+import me.mykindos.betterpvp.core.logging.PendingLog;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +26,7 @@ import static org.mockito.Mockito.when;
 class NetworkLayerTest {
 
     private final Map<String, String> config = new HashMap<>();
+    private final Map<String, Object> settings = new HashMap<>();
 
     private NetworkTransports transports;
     private NetworkLayer layer;
@@ -30,6 +38,11 @@ class NetworkLayerTest {
                 .thenAnswer(call -> config.getOrDefault(call.getArgument(0, String.class),
                         call.getArgument(1, String.class)));
 
+        when(yaml.getOrSaveObject(anyString(), any(), eq(Boolean.class)))
+                .thenAnswer(call -> settings.getOrDefault(call.getArgument(0, String.class), call.getArgument(1)));
+        when(yaml.getOrSaveObject(anyString(), any(), eq(Integer.class)))
+                .thenAnswer(call -> settings.getOrDefault(call.getArgument(0, String.class), call.getArgument(1)));
+
         final Core core = mock(Core.class);
         when(core.getConfig()).thenReturn(yaml);
 
@@ -38,7 +51,7 @@ class NetworkLayerTest {
         when(redis.isUsable()).thenReturn(false);
 
         transports = new NetworkTransports();
-        layer = new NetworkLayer(core, transports, redis,
+        layer = new NetworkLayer(core, transports, redis, new NatsConnection(core),
                 () -> mock(VelocityMessageBus.class),
                 LocalSiteDirectory::new,
                 () -> mock(ProxyPlayerTransfer.class));
@@ -128,5 +141,50 @@ class NetworkLayerTest {
 
         assertSame(theirs, layer.directory());
         assertTrue(layer.bus() instanceof VelocityMessageBus);
+    }
+
+    @Test
+    @DisplayName("a server told to use NATS that cannot reach it warns and falls back")
+    void unreachableNatsFallsBack() throws InterruptedException {
+        final List<PendingLog> warnings = new CopyOnWriteArrayList<>();
+        final LogAppender appender = log -> {
+            if ("WARN".equalsIgnoreCase(log.getLevel())) {
+                warnings.add(log);
+            }
+        };
+        LoggerFactory.getInstance().addAppender(appender);
+
+        try {
+            settings.put("core.nats.enabled", true);
+            config.put("core.nats.url", "nats://127.0.0.1:1");
+            config.put("core.network.bus", "nats");
+            config.put("core.network.directory", "nats");
+
+            assertTrue(layer.bus() instanceof VelocityMessageBus);
+            assertTrue(layer.directory() instanceof LocalSiteDirectory);
+
+            final long deadline = System.currentTimeMillis() + 2_000;
+            while (warnings.stream().noneMatch(log -> log.getMessage().contains("falling back"))
+                    && System.currentTimeMillis() < deadline) {
+                Thread.sleep(10);
+            }
+            assertTrue(warnings.stream().anyMatch(log -> log.getMessage().contains("falling back")),
+                    "the fallback should be said out loud");
+        } finally {
+            LoggerFactory.getInstance().removeAppender(appender);
+        }
+    }
+
+    @Test
+    @DisplayName("NATS left unconfigured is passed over without trying to connect")
+    void unconfiguredNatsIsPassedOver() {
+        assertTrue(layer.bus() instanceof VelocityMessageBus);
+        assertTrue(layer.directory() instanceof LocalSiteDirectory);
+    }
+
+    @Test
+    @DisplayName("without NATS there is no Placement service, so hosts come from the directory as before")
+    void hostsFallBackToTheDirectory() {
+        assertTrue(layer.hosts() instanceof DirectorySiteHosts);
     }
 }

@@ -65,6 +65,13 @@
       "replaces": "packetevents*.jar"
     },
     {
+      "name": "Polar",
+      "file": "polarpaper-2.3.1.jar",
+      "url": "https://repo.minehub.live/releases/live/minehub/polarpaper/2.3.1/polarpaper-2.3.1.jar",
+      "sha256": "b4ca7070229d9cb355d6f16a186c6abeadb7be336651fa2ebfd147bde25b5b3a",
+      "replaces": "polarpaper*.jar"
+    },
+    {
       "name": "ProtocolLib",
       "file": "ProtocolLib-5.5.0-SNAPSHOT-d89a5deb.jar",
       "sha256": "b9c817430d86688241c316bab8045ec94d234d586e1702968973018ec7793238",

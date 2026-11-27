@@ -30,7 +30,7 @@ public class ConfigInjectorModule extends AbstractModule {
     protected void configure() {
 
         for (var field : fields) {
-            if (!this.adapters.canLoad(field.getDeclaringClass())) {
+            if (!this.adapters.hasDependencies(field.getDeclaringClass())) {
                 continue; // Skip if the class is not supported
             }
             Config config = field.getAnnotation(Config.class);

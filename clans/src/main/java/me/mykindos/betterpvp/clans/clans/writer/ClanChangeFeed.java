@@ -9,6 +9,7 @@ import lombok.Value;
 import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
+import me.mykindos.betterpvp.clans.clans.events.ClanDisbandedElsewhereEvent;
 import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
 import me.mykindos.betterpvp.clans.database.jooq.tables.records.ClanMetadataRecord;
 import me.mykindos.betterpvp.clans.protocol.ClanChange;
@@ -74,16 +75,18 @@ public class ClanChangeFeed {
     private final ClanManager clanManager;
     private final ClanRepository repository;
     private final Provider<CampPermissions> campPermissions;
+    private final Provider<ClanBank> bank;
     private final ExecutorService reader = Executors.newSingleThreadExecutor(
             runnable -> Thread.ofPlatform().name("clans-change-feed").daemon().unstarted(runnable));
 
     @Inject
     public ClanChangeFeed(@NotNull Clans clans, @NotNull ClanManager clanManager, @NotNull ClanRepository repository,
-                          @NotNull Provider<CampPermissions> campPermissions) {
+                          @NotNull Provider<CampPermissions> campPermissions, @NotNull Provider<ClanBank> bank) {
         this.clans = clans;
         this.clanManager = clanManager;
         this.repository = repository;
         this.campPermissions = campPermissions;
+        this.bank = bank;
     }
 
     public static @NotNull Set<Part> partsOf(@NotNull ClanOp op) {
@@ -182,6 +185,7 @@ public class ClanChangeFeed {
             clan = snapshot.getLoaded();
             clanManager.addObject(clan.getId(), clan);
             clanManager.getLeaderboard().forceUpdate();
+            bank.get().sync(List.of(clan));
             final Set<Long> related = new HashSet<>(snapshot.getAlliances().keySet());
             related.addAll(snapshot.getEnemies().keySet());
             related.removeIf(id -> clanManager.getClanById(id).isEmpty());
@@ -292,6 +296,7 @@ public class ClanChangeFeed {
 
     /** Drops a clan that was disbanded somewhere else. */
     private void forget(@NotNull Clan clan) {
+        UtilServer.callEvent(new ClanDisbandedElsewhereEvent(clan));
         repository.forgetQueuedProperties(clan);
         clanManager.getObjects().values().forEach(other -> {
             other.getAlliances().removeIf(alliance -> alliance.getClan().getId() == clan.getId());

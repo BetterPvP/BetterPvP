@@ -859,8 +859,7 @@ public class ClanManager extends Manager<Long, Clan> {
                 UtilMessage.deserialize(getDominanceString(killer, killed))
         }, null, true);
 
-        writer.get().setDominance(killed, killedEnemy);
-        writer.get().setDominance(killer, killerEnemy);
+        writer.get().killDominance(killer, killerEnemy, killed, killedEnemy, dominance);
 
         if (killerEnemy.getDominance() == 100) {
             UtilServer.callEvent(new PillageStartEvent(new Pillage(killer, killed)));

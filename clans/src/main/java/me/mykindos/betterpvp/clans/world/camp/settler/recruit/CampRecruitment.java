@@ -48,6 +48,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.LongSupplier;
 import java.util.stream.Stream;
@@ -236,43 +237,54 @@ public class CampRecruitment implements Listener {
         return Math.round(candidate.getPrice() * (1 - best(key, CampTraits.HAGGLER, "discount", 0.10)));
     }
 
-    /** Takes a candidate on, paid for by {@code player}. Refused, and nothing is paid, if there is no room. */
-    public @NotNull SettlerResult hire(@NotNull Player player, @NotNull SiteKey key, @NotNull UUID id) {
+    /**
+     * Takes a candidate on, paid for by {@code player}. Refused, and nothing is paid, if there is no room. The
+     * candidate is taken on only once the payment lands, and the coins go back if the candidate is gone by then.
+     */
+    public @NotNull CompletableFuture<SettlerResult> hire(@NotNull Player player, @NotNull SiteKey key,
+                                                          @NotNull UUID id) {
         final Camp camp = store.cached(key.getOwnerId()).orElse(null);
         if (camp == null) {
-            return SettlerResult.refused("core.settler.not_loaded");
+            return CompletableFuture.completedFuture(SettlerResult.refused("core.settler.not_loaded"));
         }
         final SettlerCandidate candidate = find(camp, id).orElse(null);
         if (candidate == null || candidate.isExpired(clock.getAsLong())) {
-            return SettlerResult.refused("clans.settler.recruit.gone");
+            return CompletableFuture.completedFuture(SettlerResult.refused("clans.settler.recruit.gone"));
         }
         if (!permissions.allows(player, key.getOwnerId(), SettlerAction.HIRE)) {
-            return SettlerResult.refused("clans.settler.card.not_allowed");
+            return CompletableFuture.completedFuture(SettlerResult.refused("clans.settler.card.not_allowed"));
         }
         final Roster roster = settlers.roster(key).orElse(null);
         if (roster == null) {
-            return SettlerResult.refused("core.settler.not_loaded");
+            return CompletableFuture.completedFuture(SettlerResult.refused("core.settler.not_loaded"));
         }
         final int cap = settlers.populationCap(key);
         if (roster.size() >= cap) {
-            return SettlerResult.refused("core.settler.population_full", Component.text(cap));
+            return CompletableFuture.completedFuture(
+                    SettlerResult.refused("core.settler.population_full", Component.text(cap)));
         }
         final long price = price(key, candidate);
-        if (!coins.take(player, price)) {
-            return SettlerResult.refused("clans.settler.recruit.cannot_afford",
-                    CoinsTag.of(Component.text(price, NamedTextColor.YELLOW)));
-        }
-
-        final SettlerResult result = settlers.grant(key, candidate.getSettler());
-        if (!result.isSuccess()) {
-            coins.give(player, price);
+        return coins.take(player, price).thenApply(paid -> {
+            if (!paid) {
+                return SettlerResult.refused("clans.settler.recruit.cannot_afford",
+                        CoinsTag.of(Component.text(price, NamedTextColor.YELLOW)));
+            }
+            final Camp now = store.cached(key.getOwnerId()).orElse(null);
+            if (now == null || find(now, id).isEmpty()) {
+                coins.give(player, price);
+                return SettlerResult.refused("clans.settler.recruit.gone");
+            }
+            final SettlerResult result = settlers.grant(key, candidate.getSettler());
+            if (!result.isSuccess()) {
+                coins.give(player, price);
+                return result;
+            }
+            now.getArrivals().removeIf(waiting -> waiting.getSettler().getId().equals(id));
+            now.getHiringBoard().removeIf(waiting -> waiting.getSettler().getId().equals(id));
+            store.changed(key.getOwnerId());
+            UtilServer.callEvent(new SettlerHiredEvent(key, player, candidate.getSettler(), price));
             return result;
-        }
-        camp.getArrivals().remove(candidate);
-        camp.getHiringBoard().remove(candidate);
-        store.changed(key.getOwnerId());
-        UtilServer.callEvent(new SettlerHiredEvent(key, player, candidate.getSettler(), price));
-        return result;
+        });
     }
 
     /** Sends a candidate away without taking them on. */
@@ -294,20 +306,29 @@ public class CampRecruitment implements Listener {
         return SettlerResult.done(candidate.getSettler());
     }
 
-    /** Rolls a new hiring board now, paid for by {@code player}. */
-    public @Nullable String reroll(@NotNull Player player, @NotNull SiteKey key) {
-        final Camp camp = store.cached(key.getOwnerId()).orElse(null);
-        if (camp == null) {
-            return "core.settler.not_loaded";
+    /**
+     * Rolls a new hiring board once {@code player}'s payment lands, answering why it could not, or null when it was
+     * rolled.
+     */
+    public @NotNull CompletableFuture<@Nullable String> reroll(@NotNull Player player, @NotNull SiteKey key) {
+        if (store.cached(key.getOwnerId()).isEmpty()) {
+            return CompletableFuture.completedFuture("core.settler.not_loaded");
         }
         if (!permissions.allows(player, key.getOwnerId(), SettlerAction.HIRE)) {
-            return "clans.settler.card.not_allowed";
+            return CompletableFuture.completedFuture("clans.settler.card.not_allowed");
         }
-        if (!coins.take(player, config.getReroll())) {
-            return "clans.settler.recruit.cannot_afford_reroll";
-        }
-        rollBoard(key, camp, clock.getAsLong());
-        return null;
+        return coins.take(player, config.getReroll()).thenApply(paid -> {
+            if (!paid) {
+                return "clans.settler.recruit.cannot_afford_reroll";
+            }
+            final Camp camp = store.cached(key.getOwnerId()).orElse(null);
+            if (camp == null) {
+                coins.give(player, config.getReroll());
+                return "core.settler.not_loaded";
+            }
+            rollBoard(key, camp, clock.getAsLong());
+            return null;
+        });
     }
 
     private void rollBoard(@NotNull SiteKey key, @NotNull Camp camp, long now) {

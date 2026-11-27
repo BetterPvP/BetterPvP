@@ -81,6 +81,8 @@ public class ClanStore {
             case UNCLAIM -> update(connection, "DELETE FROM clan_territory WHERE clan = ? AND chunk = ?",
                     clan, required(mutation.getValue()));
             case DOMINANCE -> dominance(connection, clan, required(mutation.getOther()), required(mutation.getValue()));
+            case DOMINANCE_KILL -> killDominance(connection, clan, required(mutation.getOther()),
+                    required(mutation.getValue()));
         }
     }
 
@@ -120,6 +122,35 @@ public class ClanStore {
                 "UPDATE clan_enemies SET dominance = ? WHERE clan = ? AND enemy_clan = ?", dominance, clan, other);
         if (changed == 0) {
             throw new ClanRefusal("Clans " + clan + " and " + other + " are not enemies");
+        }
+    }
+
+    private void killDominance(@NotNull Connection connection, long killer, long killed, @NotNull String value)
+            throws ClanRefusal, SQLException {
+        final double amount;
+        try {
+            amount = Double.parseDouble(value);
+        } catch (NumberFormatException ex) {
+            throw new ClanRefusal("Dominance " + value + " is not a number");
+        }
+        final int killerOver = dominanceOver(connection, killer, killed);
+        final int killedOver = dominanceOver(connection, killed, killer);
+        final double gained = killedOver == 0 ? Math.min(100, killerOver + amount) : killerOver;
+        final double lost = Math.max(0, killedOver - amount);
+        update(connection, "UPDATE clan_enemies SET dominance = ? WHERE clan = ? AND enemy_clan = ?",
+                (int) gained, killer, killed);
+        update(connection, "UPDATE clan_enemies SET dominance = ? WHERE clan = ? AND enemy_clan = ?",
+                (int) lost, killed, killer);
+    }
+
+    private int dominanceOver(@NotNull Connection connection, long clan, long other) throws ClanRefusal, SQLException {
+        try (PreparedStatement select = prepare(connection,
+                "SELECT dominance FROM clan_enemies WHERE clan = ? AND enemy_clan = ? FOR UPDATE", clan, other);
+             ResultSet result = select.executeQuery()) {
+            if (!result.next()) {
+                throw new ClanRefusal("Clans " + clan + " and " + other + " are not enemies");
+            }
+            return result.getInt(1);
         }
     }
 

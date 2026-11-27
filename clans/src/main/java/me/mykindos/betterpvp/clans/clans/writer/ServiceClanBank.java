@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.clans.Clans;
+import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.protocol.ClanBalance;
 import me.mykindos.betterpvp.clans.protocol.ClanTopics;
@@ -20,6 +21,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +35,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * balance kept before the ledger moves into it. Nothing is posted for a clan whose account could not be opened,
  * since a posting would open it empty. After a posting lands, this server announces the clan balances the
  * ledger answered with, so every other server's cached balance follows.
+ * <p>
+ * The balance a clan loads with is only this server's last copy, so every clan's account is opened as soon as it
+ * loads, which answers with the ledger's balance. A clan whose account could not be opened is tried again later.
  */
 @CustomLog
 @Singleton
@@ -75,6 +80,20 @@ public class ServiceClanBank implements ClanBank {
                 });
     }
 
+    @Override
+    public void sync(@NotNull Collection<Clan> loaded) {
+        for (Clan clan : List.copyOf(loaded)) {
+            final List<CompletableFuture<Boolean>> openings = new ArrayList<>();
+            open(account(clan), openings);
+            openings.forEach(opening -> opening.thenAccept(opened -> {
+                if (!opened && clans.isEnabled()) {
+                    UtilServer.runTaskLater(clans, () -> clanManager.getClanById(clan.getId())
+                            .ifPresent(current -> sync(List.of(current))), 20L * 30);
+                }
+            }));
+        }
+    }
+
     private void open(@NotNull LedgerParty party, @NotNull List<CompletableFuture<Boolean>> openings) {
         if (!LedgerAccounts.isClan(party.getAccount())) {
             return;
@@ -84,6 +103,7 @@ public class ServiceClanBank implements ClanBank {
             openings.add(ledger.open(party).thenApply(receipt -> {
                 if (receipt.isPosted()) {
                     opened.add(clan);
+                    sequences.merge(clan, receipt.getSequence(), Math::max);
                 }
                 return receipt.isPosted();
             }));

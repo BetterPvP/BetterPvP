@@ -26,5 +26,11 @@ public enum ClanOp {
     CLAIM,
     UNCLAIM,
     /** Sets the clan's dominance over {@link ClanMutation#getOther()} to {@link ClanMutation#getValue()}. */
-    DOMINANCE
+    DOMINANCE,
+    /**
+     * The clan killed a member of {@link ClanMutation#getOther()} for {@link ClanMutation#getValue()} dominance. The
+     * other clan's dominance over this one falls by that much, and this one's rises by it only when the other's was
+     * already none. Both stay between 0 and 100.
+     */
+    DOMINANCE_KILL
 }

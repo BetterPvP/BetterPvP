@@ -8,6 +8,9 @@ import com.google.inject.spi.Element;
 import com.google.inject.spi.Elements;
 import com.google.inject.spi.LinkedKeyBinding;
 import me.mykindos.betterpvp.clans.clans.Clan;
+import me.mykindos.betterpvp.clans.clans.core.storage.ClanInventories;
+import me.mykindos.betterpvp.clans.clans.core.storage.LocalClanInventories;
+import me.mykindos.betterpvp.clans.clans.core.storage.ServiceClanInventories;
 import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
 import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
@@ -31,6 +34,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,6 +47,7 @@ class ClanWritingTest {
 
         assertEquals(LocalClanWriter.class, target(elements, ClanWriter.class));
         assertEquals(LocalClanBank.class, target(elements, ClanBank.class));
+        assertEquals(LocalClanInventories.class, target(elements, ClanInventories.class));
     }
 
     @Test
@@ -54,6 +59,7 @@ class ClanWritingTest {
 
             assertEquals(ServiceClanWriter.class, target(elements, ClanWriter.class), role.getId());
             assertEquals(ServiceClanBank.class, target(elements, ClanBank.class), role.getId());
+            assertEquals(ServiceClanInventories.class, target(elements, ClanInventories.class), role.getId());
             assertTrue(eager(elements, ClanWriter.class) && eager(elements, ClanBank.class), role.getId());
         }
     }
@@ -76,6 +82,8 @@ class ClanWritingTest {
         writer.claim(clan, "world/ 1/ 2");
         writer.unclaim(clan, "world/ 1/ 2");
         writer.setDominance(clan, enemy);
+        final ClanEnemy killedEnemy = new ClanEnemy(clan, 0);
+        writer.killDominance(clan, enemy, enemy.getClan(), killedEnemy, 6);
 
         verify(repository).saveProperty(clan, "ENERGY", 1200);
         verify(repository).processPropertyUpdates(false);
@@ -85,7 +93,8 @@ class ClanWritingTest {
         verify(repository).updateClanMailbox(clan);
         verify(repository).saveClanTerritory(clan, "world/ 1/ 2");
         verify(repository).deleteClanTerritory(clan, "world/ 1/ 2");
-        verify(repository).updateDominance(clan, enemy);
+        verify(repository, times(2)).updateDominance(clan, enemy);
+        verify(repository).updateDominance(enemy.getClan(), killedEnemy);
     }
 
     @Test

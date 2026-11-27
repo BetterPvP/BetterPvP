@@ -77,14 +77,14 @@ jobs:
         run: chmod +x ./gradlew
 
       - name: Run cross-service tests
-        run: ./gradlew :core:networkTest
+        run: ./gradlew :core:networkTest :clans:networkTest
 
       - name: Publish cross-service test summary
         if: always()
         uses: EnricoMi/publish-unit-test-result-action@v2
         with:
           files: |
-            core/build/test-results/networkTest/**/*.xml
+            **/build/test-results/networkTest/**/*.xml
           check_run: false
           job_summary: true
           check_name: Cross-service test results

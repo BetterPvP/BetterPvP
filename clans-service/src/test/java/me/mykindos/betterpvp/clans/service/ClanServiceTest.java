@@ -230,6 +230,35 @@ class ClanServiceTest {
     }
 
     @Test
+    void aKillMovesDominanceFromWhatIsStored() {
+        final Connection server = server();
+        assertTrue(send(server, create(1L, "Alpha", UUID.randomUUID())).isApplied());
+        assertTrue(send(server, create(2L, "Bravo", UUID.randomUUID())).isApplied());
+        assertTrue(send(server, ClanMutation.builder().op(ClanOp.ENEMY).clan(1L).other(2L).build()).isApplied());
+        assertTrue(send(server, ClanMutation.builder().op(ClanOp.DOMINANCE).clan(2L).other(1L).value("10").build())
+                .isApplied());
+
+        // Alpha kills while Bravo leads, so only the lead shrinks
+        assertTrue(send(server, kill(1L, 2L, "6")).isApplied());
+        assertEquals(0, count("SELECT dominance FROM clan_enemies WHERE clan = 1 AND enemy_clan = 2"));
+        assertEquals(4, count("SELECT dominance FROM clan_enemies WHERE clan = 2 AND enemy_clan = 1"));
+
+        // Once the lead is gone Alpha gains, never past 100
+        assertTrue(send(server, kill(1L, 2L, "6")).isApplied());
+        assertTrue(send(server, kill(1L, 2L, "6")).isApplied());
+        assertEquals(6, count("SELECT dominance FROM clan_enemies WHERE clan = 1 AND enemy_clan = 2"));
+        assertEquals(0, count("SELECT dominance FROM clan_enemies WHERE clan = 2 AND enemy_clan = 1"));
+        assertTrue(send(server, kill(1L, 2L, "200")).isApplied());
+        assertEquals(100, count("SELECT dominance FROM clan_enemies WHERE clan = 1 AND enemy_clan = 2"));
+
+        assertFalse(send(server, kill(1L, 3L, "6")).isApplied(), "A kill on a clan that is not an enemy moved dominance");
+    }
+
+    private static ClanMutation kill(long killer, long killed, String amount) {
+        return ClanMutation.builder().op(ClanOp.DOMINANCE_KILL).clan(killer).other(killed).value(amount).build();
+    }
+
+    @Test
     void aPlayerJoinedToTwoClansFromTwoServersEndsUpInOne() throws Exception {
         final Connection first = server();
         final Connection second = server();

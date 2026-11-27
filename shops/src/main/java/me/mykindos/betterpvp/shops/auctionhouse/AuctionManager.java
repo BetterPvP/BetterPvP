@@ -24,10 +24,10 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Singleton
@@ -44,6 +44,8 @@ public class AuctionManager {
     private final List<Auction> activeAuctions = new ArrayList<>();
     /** Listings whose purchase is waiting on the ledger, so a second click cannot buy them again. */
     private final Set<Long> buying = ConcurrentHashMap.newKeySet();
+    /** Auctions whose item is being delivered, so a delivery that takes a while is not started twice. */
+    private final Set<Long> delivering = ConcurrentHashMap.newKeySet();
 
     @Setter
     private IAuctionDeliveryService deliveryService = new DefaultAuctionDeliveryService();
@@ -127,11 +129,11 @@ public class AuctionManager {
         getDeliveryService().deliverCurrency(auction.getSeller(), (int) (auction.getSellPrice() * 0.95),
                 "auction-proceeds:" + auction.getAuctionID());
 
-        if (getDeliveryService().deliverAuction(player.getUniqueId(), auction)) {
-            auction.setDelivered(true);
-            getAuctionRepository().setDelivered(auction, true);
-            getActiveAuctions().remove(auction);
-        }
+        deliverAuction(player.getUniqueId(), auction).thenAccept(delivered -> {
+            if (delivered) {
+                getActiveAuctions().remove(auction);
+            }
+        });
 
         itemFactory.fromItemStack(auction.getItemStack()).ifPresent(itemInstance -> {
             itemInstance.getComponent(UUIDProperty.class).ifPresent(uuidProperty -> {
@@ -165,13 +167,13 @@ public class AuctionManager {
         auction.setCancelled(true);
         getAuctionRepository().setCancelled(auction, true);
 
-        if (getDeliveryService().deliverAuction(auction.getSeller(), auction)) {
-            auction.setDelivered(true);
-            getAuctionRepository().setDelivered(auction, true);
-            getActiveAuctions().remove(auction);
-        } else {
-            log.warn("Failed to deliver cancelled auction {}", auction.getAuctionID()).submit();
-        }
+        deliverAuction(auction.getSeller(), auction).thenAccept(delivered -> {
+            if (delivered) {
+                getActiveAuctions().remove(auction);
+            } else {
+                log.warn("Failed to deliver cancelled auction {}", auction.getAuctionID()).submit();
+            }
+        });
 
         itemFactory.fromItemStack(auction.getItemStack()).ifPresent(itemInstance -> {
             itemInstance.getComponent(UUIDProperty.class).ifPresent(uuidProperty -> {
@@ -185,9 +187,7 @@ public class AuctionManager {
     }
 
     public void cancelAllAuctions(UUID seller) {
-        Iterator<Auction> auctionIterator = activeAuctions.iterator();
-        while (auctionIterator.hasNext()) {
-            Auction auction = auctionIterator.next();
+        for (Auction auction : List.copyOf(activeAuctions)) {
             if (!auction.getSeller().equals(seller)) {
                 continue;
             }
@@ -195,11 +195,11 @@ public class AuctionManager {
             getAuctionRepository().setCancelled(auction, true);
             auction.setCancelled(true);
 
-            if (getDeliveryService().deliverAuction(auction.getSeller(), auction)) {
-                auction.setDelivered(true);
-                getAuctionRepository().setDelivered(auction, true);
-                auctionIterator.remove();
-            }
+            deliverAuction(auction.getSeller(), auction).thenAccept(delivered -> {
+                if (delivered) {
+                    activeAuctions.remove(auction);
+                }
+            });
 
             itemFactory.fromItemStack(auction.getItemStack()).ifPresent(itemInstance -> {
                 itemInstance.getComponent(UUIDProperty.class).ifPresent(uuidProperty -> {
@@ -213,15 +213,23 @@ public class AuctionManager {
         }
     }
 
-    public boolean deliverAuction(UUID target, Auction auction) {
-        if (deliveryService.deliverAuction(target, auction)) {
-            auction.setDelivered(true);
-            auctionRepository.setDelivered(auction, true);
-
-            return true;
+    /** Delivers the auction's item to {@code target}, completing with whether it was delivered. */
+    public CompletableFuture<Boolean> deliverAuction(UUID target, Auction auction) {
+        if (!delivering.add(auction.getAuctionID())) {
+            return CompletableFuture.completedFuture(false);
         }
-
-        return false;
+        return deliveryService.deliverAuction(target, auction).handle((delivered, error) -> {
+            delivering.remove(auction.getAuctionID());
+            if (error != null) {
+                log.error("Failed to deliver auction {}", auction.getAuctionID(), error).submit();
+                return false;
+            }
+            if (delivered) {
+                auction.setDelivered(true);
+                auctionRepository.setDelivered(auction, true);
+            }
+            return delivered;
+        });
     }
 
 }

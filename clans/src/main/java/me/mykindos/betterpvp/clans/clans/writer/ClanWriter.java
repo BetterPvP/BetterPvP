@@ -64,9 +64,10 @@ public interface ClanWriter {
 
     void setBanner(@NotNull Clan clan);
 
-    void saveVault(@NotNull Clan clan);
+    /** Completes once the save is stored, or once it is handed off where storing it is not waited on. */
+    @NotNull CompletableFuture<Void> saveVault(@NotNull Clan clan);
 
-    /** Completes once the save is handed off, after which this server may open the mailbox again. */
+    /** Completes once the save is stored, or once it is handed off where storing it is not waited on. */
     @NotNull CompletableFuture<Void> saveMailbox(@NotNull Clan clan);
 
     /** Persists a chunk the clan just added to its territory, as {@link UtilWorld#chunkToFile} names it. */
@@ -76,4 +77,14 @@ public interface ClanWriter {
 
     /** Persists the clan's dominance over one enemy. */
     void setDominance(@NotNull IClan clan, @NotNull ClanEnemy enemy);
+
+    /**
+     * Persists what a kill did to both sides' dominance, which the caller has already applied.
+     *
+     * @param killerEnemy the killer's side of the enmity
+     * @param killedEnemy the killed clan's side of the enmity
+     * @param amount      the dominance the kill was worth
+     */
+    void killDominance(@NotNull IClan killer, @NotNull ClanEnemy killerEnemy, @NotNull IClan killed,
+                       @NotNull ClanEnemy killedEnemy, double amount);
 }

@@ -99,13 +99,12 @@ public class HiringBoardMenu extends AbstractGui implements Windowed {
                 .material(Material.CLOCK)
                 .displayName(Translations.component("clans.camp.hall.hiring.reroll", reroll).color(NamedTextColor.YELLOW))
                 .action(ClickActions.ALL, Translations.component("clans.camp.hall.hiring.reroll", reroll))
-                .build(), click -> {
-                    final String problem = recruitment.reroll(click.getPlayer(), key);
+                .build(), click -> recruitment.reroll(click.getPlayer(), key).thenAccept(problem -> {
                     if (problem != null) {
                         menus.refuse(click.getPlayer(), problem, reroll);
                     }
                     new HiringBoardMenu(menus, click.getPlayer(), key, previous).show(click.getPlayer());
-                }));
+                })));
         if (menus.getHarbourmaster().has(key)) {
             setItem(18, HarbourmasterMenu.button(menus, key,
                     player -> new HarbourmasterMenu(menus, key, new HiringBoardMenu(menus, player, key, previous))

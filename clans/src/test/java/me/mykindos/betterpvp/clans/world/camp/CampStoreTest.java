@@ -50,6 +50,23 @@ class CampStoreTest {
         assertEquals("elsewhere", new CampStore(storage).load(CLAN).join().getSkin());
     }
 
+    @Test
+    @DisplayName("a camp refused as stale is read again, so the next write lands on top of the newer one")
+    void aStaleCampIsReadAgain() {
+        final Versioned storage = new Versioned();
+        final CampStore here = new CampStore(storage);
+        here.load(CLAN).join().setSkin("here");
+        final CampStore elsewhere = new CampStore(storage);
+        elsewhere.load(CLAN).join().setSkin("elsewhere");
+        elsewhere.save(CLAN).join();
+
+        here.save(CLAN).join();
+        here.cached(CLAN).orElseThrow().setSkin(here.cached(CLAN).orElseThrow().getSkin() + " and here");
+        here.save(CLAN).join();
+
+        assertEquals("elsewhere and here", new CampStore(storage).load(CLAN).join().getSkin());
+    }
+
     /** Refuses a write that names a version other than the stored one, as every store must. */
     private static final class Versioned implements SiteStorage {
 

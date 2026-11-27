@@ -2,17 +2,15 @@ package me.mykindos.betterpvp.clans.world.camp.upgrade;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
-import lombok.CustomLog;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.world.camp.Camp;
 import me.mykindos.betterpvp.clans.world.camp.CampConfig;
 import me.mykindos.betterpvp.clans.world.camp.CampStore;
+import me.mykindos.betterpvp.clans.world.camp.settler.recruit.CampCoins;
 import me.mykindos.betterpvp.clans.world.camp.structure.CampStructures;
 import me.mykindos.betterpvp.clans.world.camp.structure.CampUpgrades;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
-import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
-import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.UtilTime;
 import me.mykindos.betterpvp.core.world.construction.ConstructionResult;
@@ -24,12 +22,12 @@ import me.mykindos.betterpvp.core.world.construction.Worksite;
 import me.mykindos.betterpvp.core.world.site.SiteKey;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
-import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.Duration;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import me.mykindos.betterpvp.core.utilities.model.tag.CoinsTag;
 
 /**
@@ -37,7 +35,6 @@ import me.mykindos.betterpvp.core.utilities.model.tag.CoinsTag;
  * is a rate for every minute the job has left, with a floor.
  */
 @Singleton
-@CustomLog
 public class RushOrder {
 
     public static final String ID = "rush_order";
@@ -50,14 +47,14 @@ public class RushOrder {
     private final ConstructionService construction;
     private final StructureStatusTracker tracker;
 
-    private final Ledger ledger;
+    private final CampCoins coins;
 
     @Inject
     public RushOrder(@NotNull CampUpgrades upgrades, @NotNull CampConfig config, @NotNull CampStore store,
                      @NotNull ClientManager clientManager, @NotNull ClanManager clanManager,
                      @NotNull ConstructionService construction, @NotNull StructureStatusTracker tracker,
-                     @NotNull Ledger ledger) {
-        this.ledger = ledger;
+                     @NotNull CampCoins coins) {
+        this.coins = coins;
         this.upgrades = upgrades;
         this.config = config;
         this.store = store;
@@ -135,33 +132,38 @@ public class RushOrder {
         return Optional.empty();
     }
 
-    /** Charges {@code player} and finishes the job on {@code structure} in {@code worksite}, if nothing stops it. */
-    public @NotNull ConstructionResult rush(@NotNull Player player, @NotNull Worksite worksite,
-                                            @NotNull PlacedStructure structure) {
+    /**
+     * Charges {@code player} and finishes the job on {@code structure} in {@code worksite}, if nothing stops it. The
+     * job is finished only once the charge lands, and the coins go back if it cannot be finished by then.
+     */
+    public @NotNull CompletableFuture<ConstructionResult> rush(@NotNull Player player, @NotNull Worksite worksite,
+                                                               @NotNull PlacedStructure structure) {
         final SiteKey key = worksite.getKey();
         final Optional<Component> problem = problem(player, key, structure);
         if (problem.isPresent()) {
-            return ConstructionResult.refused(problem.get());
+            return CompletableFuture.completedFuture(ConstructionResult.refused(problem.get()));
         }
-        final Optional<Camp> camp = store.cached(key.getOwnerId());
-        if (camp.isEmpty()) {
-            return ConstructionResult.refused("core.construction.no_holding");
+        if (store.cached(key.getOwnerId()).isEmpty()) {
+            return CompletableFuture.completedFuture(ConstructionResult.refused("core.construction.no_holding"));
         }
-        final long now = tracker.now();
-        final long price = price(structure.getJob(), now);
-        final ConstructionResult result = construction.finish(worksite.getWorld(), structure.getId());
-        if (result.isSuccess()) {
-            ledger.move(LedgerParty.of(gamer(player)), LedgerParty.system(LedgerAccounts.CAMP), price, "camp.rush")
-                    .thenAccept(receipt -> {
-                        if (!receipt.isPosted()) {
-                            log.warn("Rushed a job for {} but could not charge {} coins: {}", player.getName(), price,
-                                    receipt.getStatus()).submit();
-                        }
-                    });
-            camp.get().setRushedAt(now);
+        final long price = price(structure.getJob(), tracker.now());
+        return coins.take(player, price, "camp.rush").thenApply(paid -> {
+            if (!paid) {
+                return ConstructionResult.refused("clans.camp.upgrade.rush_order.cannot_afford",
+                        CoinsTag.of(Component.text(UtilFormat.formatNumber((int) price), NamedTextColor.YELLOW)));
+            }
+            final Optional<Camp> camp = store.cached(key.getOwnerId());
+            final ConstructionResult result = camp.isEmpty()
+                    ? ConstructionResult.refused("core.construction.no_holding")
+                    : construction.finish(worksite.getWorld(), structure.getId());
+            if (!result.isSuccess()) {
+                coins.give(player, price);
+                return result;
+            }
+            camp.get().setRushedAt(tracker.now());
             store.changed(key.getOwnerId());
-        }
-        return result;
+            return result;
+        });
     }
 
     private @NotNull Gamer gamer(@NotNull Player player) {

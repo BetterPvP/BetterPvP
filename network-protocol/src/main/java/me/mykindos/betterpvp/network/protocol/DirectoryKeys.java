@@ -20,6 +20,8 @@ import java.util.UUID;
  *   <tr><td>{@code <prefix>-arrivals}</td><td>{@code <player uuid>}</td>
  *       <td>instance, site, owner, server, world, landing</td><td>60s</td></tr>
  *   <tr><td>{@code <prefix>-hosts}</td><td>{@code <site>.<owner>}</td><td>server</td><td>never</td></tr>
+ *   <tr><td>{@code <prefix>-leases}</td><td>{@code <site>.<owner>}</td><td>server, placed</td>
+ *       <td>never, Placement decides when a lease has lapsed</td></tr>
  * </table>
  */
 public final class DirectoryKeys {
@@ -45,6 +47,11 @@ public final class DirectoryKeys {
 
     public static String hosts(String prefix) {
         return prefix + "-hosts";
+    }
+
+    /** Which server holds each owned site, written only by the Placement service. */
+    public static String leases(String prefix) {
+        return prefix + "-leases";
     }
 
     public static String instance(String siteId, long ownerId, UUID instance) {

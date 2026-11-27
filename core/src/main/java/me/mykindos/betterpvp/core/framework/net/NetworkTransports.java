@@ -14,9 +14,9 @@ import java.util.function.Supplier;
 /**
  * The named implementations of each network seam, and where another network adds its own.
  * <p>
- * The three seams are registered separately on purpose. A network can carry messages one way, hold shared state
- * another and move players a third, and bundling them would force whoever integrates to supply pieces they do not
- * have. Joining a network that already has a message bus but uses the ordinary proxy transfer should mean replacing
+ * The seams are registered separately on purpose. A network can carry messages one way, hold shared state another,
+ * move players a third and decide hosts a fourth, and bundling them would force whoever integrates to supply pieces
+ * they do not have. Joining a network that already has a message bus but uses the ordinary proxy transfer should mean replacing
  * one of these and leaving the others alone.
  * <p>
  * Register during startup, before anything asks for a seam. What each seam resolves to is read once and kept.
@@ -31,6 +31,7 @@ public class NetworkTransports {
     private final Map<String, Supplier<MessageBus>> buses = new ConcurrentHashMap<>();
     private final Map<String, Supplier<SiteDirectory>> directories = new ConcurrentHashMap<>();
     private final Map<String, Supplier<PlayerTransfer>> transfers = new ConcurrentHashMap<>();
+    private final Map<String, Supplier<SiteHosts>> hosts = new ConcurrentHashMap<>();
 
     public void registerBus(@NotNull String name, @NotNull Supplier<MessageBus> factory) {
         register(buses, "message bus", name, factory);
@@ -42,6 +43,10 @@ public class NetworkTransports {
 
     public void registerTransfer(@NotNull String name, @NotNull Supplier<PlayerTransfer> factory) {
         register(transfers, "player transfer", name, factory);
+    }
+
+    public void registerHosts(@NotNull String name, @NotNull Supplier<SiteHosts> factory) {
+        register(hosts, "site host chooser", name, factory);
     }
 
     public @NotNull Optional<MessageBus> bus(@NotNull String name) {
@@ -56,6 +61,10 @@ public class NetworkTransports {
         return resolve(transfers, name);
     }
 
+    public @NotNull Optional<SiteHosts> hosts(@NotNull String name) {
+        return resolve(hosts, name);
+    }
+
     public @NotNull Set<String> busNames() {
         return Set.copyOf(buses.keySet());
     }
@@ -66,6 +75,10 @@ public class NetworkTransports {
 
     public @NotNull Set<String> transferNames() {
         return Set.copyOf(transfers.keySet());
+    }
+
+    public @NotNull Set<String> hostsNames() {
+        return Set.copyOf(hosts.keySet());
     }
 
     private <T> void register(@NotNull Map<String, Supplier<T>> into, @NotNull String seam, @NotNull String name,

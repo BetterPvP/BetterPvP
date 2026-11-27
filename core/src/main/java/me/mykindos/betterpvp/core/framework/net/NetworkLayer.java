@@ -14,8 +14,8 @@ import java.util.Optional;
  * Resolves each network seam once, from config, and holds what it resolved.
  * <p>
  * Every seam is chosen the same way: a name from config, looked up in {@link NetworkTransports}. The names that ship
- * are {@code proxy}, {@code nats}, {@code redis} and {@code local}, and anything another network registers stands beside them on
- * equal terms. This is the only class that chooses, so joining a different network is a registration and a config
+ * are {@code proxy}, {@code nats}, {@code redis}, {@code local}, {@code service} and {@code directory}, and anything
+ * another network registers stands beside them on equal terms. This is the only class that chooses, so joining a different network is a registration and a config
  * value, never an edit to whatever is using a seam.
  */
 @Singleton
@@ -26,6 +26,8 @@ public class NetworkLayer {
     public static final String NATS = "nats";
     public static final String REDIS = "redis";
     public static final String LOCAL = "local";
+    public static final String SERVICE = "service";
+    public static final String DIRECTORY = "directory";
 
     private final Core core;
     private final NetworkTransports transports;
@@ -35,6 +37,7 @@ public class NetworkLayer {
     private volatile MessageBus bus;
     private volatile SiteDirectory directory;
     private volatile PlayerTransfer transfer;
+    private volatile SiteHosts hosts;
 
     @Inject
     public NetworkLayer(@NotNull Core core, @NotNull NetworkTransports transports, @NotNull RedisConnection redis,
@@ -58,6 +61,9 @@ public class NetworkLayer {
                 : null);
         transports.registerDirectory(REDIS, () -> redis.isUsable() ? new RedisSiteDirectory(core, redis.getPool()) : null);
         transports.registerTransfer(PROXY, proxyTransfer::get);
+        // Placement runs beside NATS, so a network without NATS has no service to ask.
+        transports.registerHosts(SERVICE, () -> nats.isUsable() ? new PlacementSiteHosts(bus()) : null);
+        transports.registerHosts(DIRECTORY, () -> new DirectorySiteHosts(directory()));
     }
 
     /** How servers talk to each other. */
@@ -94,6 +100,18 @@ public class NetworkLayer {
             }
         }
         return transfer;
+    }
+
+    /** Which server hosts a site. */
+    public @NotNull SiteHosts hosts() {
+        if (hosts == null) {
+            synchronized (this) {
+                if (hosts == null) {
+                    hosts = choose("placement", transports::hosts, List.of(SERVICE, DIRECTORY), "site host chooser");
+                }
+            }
+        }
+        return hosts;
     }
 
     public void close() {

@@ -31,4 +31,10 @@ public class NetModule extends AbstractModule {
     PlayerTransfer transfer(NetworkLayer layer) {
         return layer.transfer();
     }
+
+    @Provides
+    @Singleton
+    SiteHosts hosts(NetworkLayer layer) {
+        return layer.hosts();
+    }
 }

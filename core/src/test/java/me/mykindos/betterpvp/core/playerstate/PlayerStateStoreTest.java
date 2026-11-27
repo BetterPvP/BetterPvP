@@ -50,7 +50,6 @@ import static org.mockito.Mockito.when;
 class PlayerStateStoreTest {
 
     private static final NamespacedKey BLADE = new NamespacedKey("test", "blade");
-    private static final NamespacedKey EXTRA = new NamespacedKey("test", "extra");
 
     private static PostgreSQLContainer<?> postgres;
     private static DataSource dataSource;
@@ -190,7 +189,7 @@ class PlayerStateStoreTest {
             nested.set(new NamespacedKey("test", "bytes"), PersistentDataType.BYTE_ARRAY, new byte[]{1, 2, (byte) damage});
             nested.set(new NamespacedKey("test", "flag"), PersistentDataType.BOOLEAN, true);
             nested.set(new NamespacedKey("test", "ratio"), PersistentDataType.DOUBLE, damage / 3.0);
-            pdc.set(EXTRA, PersistentDataType.TAG_CONTAINER, nested);
+            pdc.set(new NamespacedKey("test", "extra"), PersistentDataType.TAG_CONTAINER, nested);
         });
         return stack;
     }

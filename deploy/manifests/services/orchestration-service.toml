@@ -59,6 +59,7 @@ namespace = ""
 # The role each site runs on. Sites not listed run on default_role.
 [placement.sites]
 camp = "camp"
+hub = "hub"
 dungeon = "dungeon"
 event = "event"
 
@@ -66,6 +67,10 @@ event = "event"
 [placement.fleets.camp]
 fleet = "camp"
 counter = "camp-slots"
+
+[placement.fleets.hub]
+fleet = "hub"
+counter = "players"
 
 [placement.fleets.dungeon]
 fleet = "dungeon"

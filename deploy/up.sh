@@ -34,10 +34,11 @@ kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f - >/d
 kubectl create namespace shulker-system --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
 service_image() { echo "ghcr.io/betterpvp/$1:${SERVICE_TAG:-$TAG}"; }
+PROXY_IMAGE=${BPVP_PROXY_IMAGE:-$(service_image proxy)}
 
 step "Images"
 if [[ ${BPVP_IMAGE_LOCAL:-} == 1 ]]; then
-  images=("$IMAGE")
+  images=("$IMAGE" "$PROXY_IMAGE")
   for service in $SERVICES; do images+=("$(service_image "$service")"); done
   k3d image import -c "$CLUSTER" "${images[@]}"
   pull_policy=Never
@@ -98,7 +99,7 @@ for service in $SERVICES; do
 done
 
 step "Proxies and servers"
-kubectl apply -f manifests/network.yaml
+sed -e "s|__PROXY_IMAGE__|$PROXY_IMAGE|" -e "s|__PULL_POLICY__|$pull_policy|" manifests/network.yaml | kubectl apply -f -
 sed -e "s|__IMAGE__|$IMAGE|" -e "s|__PULL_POLICY__|$pull_policy|" -e "s|__SERVER_MEMORY__|$SERVER_MEMORY|" \
   manifests/servers.yaml | kubectl apply -f -
 

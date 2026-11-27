@@ -67,7 +67,7 @@ docker build -t ghcr.io/betterpvp/server:local build/image
 docker/server/check.sh ghcr.io/betterpvp/server:local
 ```
 
-`stage.sh` needs AWS credentials that can read the plugin store (`plugins/<sha256>/<file>` in the playtest bucket, see BetterPvP/playtest `docs/plugins.md`). A jar with a url is downloaded when the store does not have it. Every jar is checked against its sha256.
+`stage.sh` takes the paid and url-less jars from `PLUGIN_DIR`, a local folder it only reads, or else needs AWS credentials that can read the plugin store (`plugins/<sha256>/<file>` in the playtest bucket, see BetterPvP/playtest `docs/plugins.md`). A jar with a url is downloaded when the store does not have it. Every jar is checked against its sha256.
 
 `check.sh` starts the image as `all` against the docker-compose Postgres in a database of its own and waits for `Done`. It then checks a `camp` server has no MythicMobs or Dungeons jar.
 

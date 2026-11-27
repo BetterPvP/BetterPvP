@@ -20,7 +20,6 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -103,7 +102,7 @@ public class SiteWorlds {
             return CompletableFuture.completedFuture(loaded);
         }
 
-        final String chosen = Objects.requireNonNullElse(template, source.getTemplate());
+        final String chosen = template != null ? template : source.getTemplate();
         if (source.getKind() == WorldSource.Kind.SLIME && chosen != null && slime.canBuild(chosen)) {
             return slime.open(chosen, worldName);
         }

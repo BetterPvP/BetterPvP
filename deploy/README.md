@@ -11,7 +11,7 @@ One command runs the whole network on your machine in a k3d cluster:
 | CloudNativePG | chart 0.29.2, one Postgres instance |
 | Velocity | 2 proxies with the BetterPvP proxy plugin, on `localhost:25565` |
 | Paper | the server image, one fleet per role |
-| Services | Placement (`orchestration-service`), `clans-service`, `ledger-service` |
+| Services | Placement (`orchestration-service`), `clans-service`, `ledger-service`, `sessions-service` |
 
 ## Needs
 
@@ -36,24 +36,34 @@ It creates the cluster `bpvp`, installs everything and starts the fleets. Run it
 |---|---|---|
 | `BPVP_TAG` | `network-preview` | The tag of every image. Any tag CI pushed, such as a commit |
 | `BPVP_IMAGE` | `ghcr.io/betterpvp/server:$BPVP_TAG` | The server image, when it differs |
-| `SERVICES` | `orchestration-service clans-service ledger-service` | The services to run |
+| `SERVICES` | `orchestration-service clans-service ledger-service sessions-service` | The services to run |
 | `SERVICE_TAG` | `$BPVP_TAG` | The service and proxy images' tag, when it differs |
 | `BPVP_PROXY_IMAGE` | `ghcr.io/betterpvp/proxy:$SERVICE_TAG` | The proxy image, when it differs |
-| `BPVP_IMAGE_LOCAL` | | `1` to use images built on this machine instead of pulling them |
+| `BPVP_BUILD_LOCAL` | | `1` to build every image from this checkout first, see below |
+| `BPVP_SKIP_BUILD` | | `1` with `BPVP_BUILD_LOCAL` to reuse the images it built last |
+| `PLUGIN_DIR` | | With `BPVP_BUILD_LOCAL`, a folder holding the `plugins.json` jars that have no url |
+| `BPVP_IMAGE_LOCAL` | | `1` to use images already on this machine instead of pulling them |
 | `GHCR_USER`, `GHCR_TOKEN` | | A GitHub login that can read the image. Save the token with the team's secrets |
 | `ASSETS_BUCKET`, `ASSETS_AWS_ACCESS_KEY_ID`, `ASSETS_AWS_SECRET_ACCESS_KEY`, `ASSETS_RESTIC_PASSWORD` | | Read-only build assets access. Unset, servers start without assets |
 | `SERVER_MEMORY` | `3Gi` | Memory limit of each Paper server |
 | `ROLES` | `hub resource camp dungeon event` | The role fleets to run. The others are stopped |
+| `BUFFER_MAX` | | The most servers any role's autoscaler may run, for a small machine |
 | `CLUSTER` | `bpvp` | The k3d cluster name |
 
 The script turns these into Kubernetes secrets in the `bpvp` namespace. Nothing secret is in this folder.
 
-A local image:
+### From this checkout
 
 ```bash
-docker build -t ghcr.io/betterpvp/server:local build/image   # see docker/server/README.md
-BPVP_IMAGE=ghcr.io/betterpvp/server:local BPVP_IMAGE_LOCAL=1 deploy/up.sh
+BPVP_BUILD_LOCAL=1 PLUGIN_DIR=~/Downloads/plugins deploy/up.sh
 ```
+
+`deploy/build-local.sh` builds the suite, the proxy and every service with Gradle, then their images, and the cluster runs those. It needs no registry and no secrets.
+
+- The images are named `bpvp.local/<name>:local`, so they never go to the team's registry. The server image holds paid plugins.
+- `PLUGIN_DIR` is only read. Each `plugins.json` jar without a url is found there by its sha256. Jars with a url are downloaded.
+- Without one of those jars no server starts, because Core requires PacketEvents. Dungeon servers also need FastAsyncWorldEdit and MythicMobs.
+- Put the private repository at `private/` for the Dungeons, Events and Store jars. Without them the dungeon and event roles have nothing of their own to run.
 
 ## Fleets
 
@@ -89,10 +99,12 @@ Each runs one Deployment in `bpvp`, from `manifests/services/<name>.yaml`. The `
 | `orchestration-service` | Placement, on NATS. `manifests/services/orchestration-service.toml` is its config. Its service account may list GameServers and create GameServerAllocations in `bpvp` |
 | `clans-service` | One replica, so clan changes stay in order. NATS and the `betterpvp` database |
 | `ledger-service` | NATS and its own `ledger` database |
+| `sessions-service` | NATS |
 
 Every service and server uses the NATS prefix `bpvp`. Change it in all of them at once.
 
-A new service, such as Sessions: add `manifests/services/<name>.yaml` with `__IMAGE__` and `__PULL_POLICY__` where the image goes, and add it to `SERVICES`. The workflow already builds `sessions-service` once the module exists. Other names go in its list.
+
+A new service: add `manifests/services/<name>.yaml` with `__IMAGE__` and `__PULL_POLICY__` where the image goes, add it to `SERVICES` and to the `Service images` workflow's list.
 
 Each server's name (`core.info.server`) is its GameServer's name, which Placement sends camps to.
 
@@ -113,6 +125,27 @@ deploy/check.sh down   # nothing is left
 ```
 
 The check asks Placement for a hub the way a joining proxy does, which allocates that hub. Joining with a Minecraft client is checked by hand.
+
+`check.sh` also fails when Core or another BetterPvP plugin did not start on a server, since Shulker reports a server Ready either way.
+
+`deploy/network-check.sh` checks the network by machine, one step at a time:
+
+```bash
+deploy/network-check.sh event       # event scales from 0 to 1 and back
+deploy/network-check.sh placement   # Placement fills one camp server, then allocates a second
+deploy/network-check.sh drain       # the first camp server, deleted, reports no room, stops in its grace and gets no new camps
+deploy/network-check.sh rollout bpvp.local/server:local-2   # after up.sh with that image, every Ready server runs it
+```
+
+Run `placement` before `drain`, on a `camp` fleet allowed two servers. Allocated servers keep their image until they stop.
+
+On a machine with 8 GB for Docker, run the roles in batches with `BUFFER_MAX` so the spares fit:
+
+```bash
+BPVP_BUILD_LOCAL=1 PLUGIN_DIR=~/Downloads/plugins ROLES="hub resource" BUFFER_MAX=1 deploy/up.sh && ROLES="hub resource" deploy/check.sh
+BPVP_BUILD_LOCAL=1 BPVP_SKIP_BUILD=1 ROLES="dungeon event" BUFFER_MAX=1 deploy/up.sh && deploy/network-check.sh event
+BPVP_BUILD_LOCAL=1 BPVP_SKIP_BUILD=1 ROLES=camp BUFFER_MAX=2 deploy/up.sh && deploy/network-check.sh placement && deploy/network-check.sh drain
+```
 
 ## Down
 

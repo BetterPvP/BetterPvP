@@ -12,6 +12,8 @@ import me.mykindos.betterpvp.core.combat.data.SoundProvider;
 import me.mykindos.betterpvp.core.combat.events.DamageEvent;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapter;
 import me.mykindos.betterpvp.core.framework.events.ServerStartEvent;
+import me.mykindos.betterpvp.core.framework.role.RunsOn;
+import me.mykindos.betterpvp.core.framework.role.ServerRole;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
@@ -31,6 +33,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+@RunsOn({ServerRole.RESOURCE, ServerRole.DUNGEON, ServerRole.EVENT})
 @PluginAdapter("MythicMobs")
 @Singleton
 @BPvPListener

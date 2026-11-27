@@ -20,6 +20,9 @@ clans:
     # Where a camp's skins live. A clan's chosen skin is a folder name under this, and the camp world is rebuilt
     # from it whenever the choice changes. Falls back to the camp site's own 'from' template when nothing is chosen.
     skins: "templates/camps/"
+    # Players outside the owning clan that a camp has room for. A camp server's player limit is its
+    # camp slots times this plus the clan member limit.
+    visitors: 4
   coins:
     percentCoinsDroppedOnDeath: 0.1
     dropCoinsOnDeath: true

@@ -68,14 +68,16 @@ public class RedisSiteDirectory implements SiteDirectory {
     }
 
     @Override
-    public void publish(@NotNull Collection<RemoteInstance> instances) {
+    public void publish(@NotNull Collection<RemoteInstance> instances, @NotNull ServerRoom room) {
         final String server = currentServer();
         final List<RemoteInstance> snapshot = List.copyOf(instances);
 
         UtilServer.runTaskAsync(core, () -> {
             try (Jedis jedis = pool.getResource()) {
-                jedis.hset(SERVER + server, Map.of("players", String.valueOf(snapshot.stream()
-                        .mapToInt(RemoteInstance::getOccupants).sum())));
+                jedis.hset(SERVER + server, Map.of(
+                        "players", String.valueOf(snapshot.stream().mapToInt(RemoteInstance::getOccupants).sum()),
+                        "online", String.valueOf(room.getOnline()),
+                        "limit", String.valueOf(room.getLimit())));
                 jedis.expire(SERVER + server, ENTRY_TTL_SECONDS);
                 jedis.sadd(SERVERS, server);
 
@@ -164,6 +166,18 @@ public class RedisSiteDirectory implements SiteDirectory {
             final String holder = jedis.get(key);
             return holder == null ? candidate : holder;
         }, candidate);
+    }
+
+    @Override
+    public @NotNull CompletableFuture<Optional<ServerRoom>> room(@NotNull String server) {
+        return async(jedis -> {
+            final Map<String, String> fields = jedis.hgetAll(SERVER + server);
+            if (!fields.containsKey("online") || !fields.containsKey("limit")) {
+                return Optional.<ServerRoom>empty();
+            }
+            return Optional.of(new ServerRoom(server, Integer.parseInt(fields.get("online")),
+                    Integer.parseInt(fields.get("limit"))));
+        }, Optional.empty());
     }
 
     @Override

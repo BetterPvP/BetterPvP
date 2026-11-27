@@ -11,7 +11,10 @@ import me.mykindos.betterpvp.core.framework.net.RemoteInstance;
 import me.mykindos.betterpvp.core.framework.net.SiteDirectory;
 import me.mykindos.betterpvp.core.framework.net.SiteHosts;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
+import me.mykindos.betterpvp.core.locale.Translations;
+import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -107,9 +110,18 @@ public class NetworkPlacement implements Placement, Listener {
         final RemoteInstance destination = new RemoteInstance(handle.getInstanceId(), handle.getKey().getSiteId(),
                 handle.getKey().getOwnerId(), handle.getServer(), handle.getWorld(), true, 0);
 
-        // Recorded before the transfer, because the server they land on has no other way to know why they came.
-        travellers.forEach(traveller -> directory.expect(traveller.getUniqueId(), new Arrival(destination, landing)));
-        return transfers.transferAll(travellers, handle.getServer());
+        return directory.room(handle.getServer()).thenCompose(room -> {
+            // A server that has not reported its room is let through, and turns away anyone over its limit itself.
+            if (room.isPresent() && !room.get().fits(travellers.size())) {
+                travellers.forEach(traveller -> UtilMessage.message(traveller, "core.prefix.server",
+                        Translations.component("core.site.server_full").color(NamedTextColor.RED)));
+                return CompletableFuture.completedFuture(false);
+            }
+
+            // Recorded before the transfer, because the server they land on has no other way to know why they came.
+            travellers.forEach(traveller -> directory.expect(traveller.getUniqueId(), new Arrival(destination, landing)));
+            return transfers.transferAll(travellers, handle.getServer());
+        });
     }
 
     /**

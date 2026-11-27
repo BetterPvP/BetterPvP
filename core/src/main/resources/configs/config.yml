@@ -18,6 +18,9 @@ core:
     bus: auto
     directory: auto
     transfer: auto
+  agones:
+    # How many camps a camp server holds at once.
+    campSlots: 6
   redis:
     # When off, messages between servers go through the proxy instead, which only works while somebody is online.
     enabled: false

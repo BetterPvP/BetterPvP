@@ -116,7 +116,7 @@ public class NatsSiteDirectory implements SiteDirectory {
     }
 
     @Override
-    public void publish(@NotNull Collection<RemoteInstance> advertised) {
+    public void publish(@NotNull Collection<RemoteInstance> advertised, @NotNull ServerRoom room) {
         final String self = server.get();
         final List<RemoteInstance> snapshot = List.copyOf(advertised);
 
@@ -124,7 +124,9 @@ public class NatsSiteDirectory implements SiteDirectory {
             try {
                 servers.put(DirectoryKeys.token(self), codec.encodeFields(Map.of(
                         "server", self,
-                        "players", String.valueOf(snapshot.stream().mapToInt(RemoteInstance::getOccupants).sum()))));
+                        "players", String.valueOf(snapshot.stream().mapToInt(RemoteInstance::getOccupants).sum()),
+                        "online", String.valueOf(room.getOnline()),
+                        "limit", String.valueOf(room.getLimit()))));
 
                 for (RemoteInstance instance : snapshot) {
                     // The holding server is the only one that knows how many people are in an instance, so it writes
@@ -236,6 +238,18 @@ public class NatsSiteDirectory implements SiteDirectory {
                 return fields == null ? candidate : fields.getOrDefault("server", candidate);
             }
         }, candidate);
+    }
+
+    @Override
+    public @NotNull CompletableFuture<Optional<ServerRoom>> room(@NotNull String server) {
+        return async(() -> {
+            final Map<String, String> fields = read(servers, DirectoryKeys.token(server));
+            if (fields == null || !fields.containsKey("online") || !fields.containsKey("limit")) {
+                return Optional.<ServerRoom>empty();
+            }
+            return Optional.of(new ServerRoom(server, Integer.parseInt(fields.get("online")),
+                    Integer.parseInt(fields.get("limit"))));
+        }, Optional.empty());
     }
 
     @Override

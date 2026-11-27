@@ -2,6 +2,7 @@ package me.mykindos.betterpvp.core.framework.agones;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import lombok.Getter;
 import me.mykindos.betterpvp.core.config.Config;
 import me.mykindos.betterpvp.core.framework.role.RoleGate;
 import me.mykindos.betterpvp.core.framework.role.ServerRole;
@@ -26,8 +27,10 @@ public class AgonesLifecycle implements Listener {
     private final GameServerSdk sdk;
     private final RoleGate roleGate;
 
+    /** How many camps a camp server holds at once. */
+    @Getter
     @Inject
-    @Config(path = "core.agones.campSlots", defaultValue = "10")
+    @Config(path = "core.agones.campSlots", defaultValue = "6")
     private int campSlots;
 
     private boolean ready;

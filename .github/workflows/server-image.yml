@@ -1,0 +1,119 @@
+name: Server image
+
+on:
+  push:
+    branches: [ "camps/main" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: server-image-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/betterpvp/server
+  SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  BRANCH: ${{ github.head_ref || github.ref_name }}
+  RESTIC_VERSION: 0.19.1
+
+jobs:
+  image:
+    name: Build and push the server image
+    # Pull requests from forks get no secrets, so they cannot reach the plugin store.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Pick the private branch
+        env:
+          DEPLOY_KEY: ${{ secrets.PRIVATE_DEPLOY_KEY }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          [[ -n $DEPLOY_KEY ]] || { echo "PRIVATE_DEPLOY_KEY is not set, see docker/server/README.md"; exit 1; }
+          key=$(mktemp) && printf '%s\n' "$DEPLOY_KEY" > "$key" && chmod 600 "$key"
+          export GIT_SSH_COMMAND="ssh -i $key -o StrictHostKeyChecking=accept-new"
+          # The same-named branch, then the pull request's base, then the default branch.
+          for candidate in "$BRANCH" $BASE; do
+            if git ls-remote --exit-code --heads git@github.com:BetterPvP/BetterPvP-Private.git "$candidate" >/dev/null; then
+              echo "PRIVATE_BRANCH=$candidate" >> "$GITHUB_ENV"
+              echo "private branch: $candidate"
+              break
+            fi
+          done
+          rm -f "$key"
+
+      - uses: actions/checkout@v4
+        with:
+          repository: BetterPvP/BetterPvP-Private
+          ref: ${{ env.PRIVATE_BRANCH }}
+          path: private
+          ssh-key: ${{ secrets.PRIVATE_DEPLOY_KEY }}
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-read-only: ${{ github.event_name != 'push' }}
+
+      - name: Build the suite
+        run: ./gradlew shadowJar --console=plain
+
+      - name: Install restic
+        if: vars.ASSETS_BUCKET != ''
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -fsSLO "https://github.com/restic/restic/releases/download/v$RESTIC_VERSION/restic_${RESTIC_VERSION}_linux_amd64.bz2"
+          curl -fsSLO "https://github.com/restic/restic/releases/download/v$RESTIC_VERSION/SHA256SUMS"
+          grep "restic_${RESTIC_VERSION}_linux_amd64.bz2" SHA256SUMS | sha256sum -c -
+          bunzip2 "restic_${RESTIC_VERSION}_linux_amd64.bz2"
+          sudo install -m 755 "restic_${RESTIC_VERSION}_linux_amd64" /usr/local/bin/restic
+
+      - name: Stage the image
+        env:
+          PLUGIN_STORE_BUCKET: ${{ vars.PLUGIN_STORE_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.PLUGIN_STORE_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.PLUGIN_STORE_AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ${{ vars.PLUGIN_STORE_REGION || 'us-east-2' }}
+          ASSETS_BUCKET: ${{ vars.ASSETS_BUCKET }}
+          ASSETS_AWS_ACCESS_KEY_ID: ${{ secrets.ASSETS_AWS_ACCESS_KEY_ID }}
+          ASSETS_AWS_SECRET_ACCESS_KEY: ${{ secrets.ASSETS_AWS_SECRET_ACCESS_KEY }}
+          ASSETS_RESTIC_PASSWORD: ${{ secrets.ASSETS_RESTIC_PASSWORD }}
+        run: docker/server/stage.sh "$RUNNER_TEMP/image"
+
+      - name: Tags
+        run: |
+          slug=$(tr '[:upper:]' '[:lower:]' <<<"$BRANCH" | sed -E 's/[^a-z0-9._-]+/-/g; s/^[-.]+//' | cut -c1-120)
+          { echo "TAGS<<EOF"; echo "$IMAGE:$SHA"; echo "$IMAGE:${SHA:0:12}"; echo "$IMAGE:$slug"; echo "EOF"; } >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ runner.temp }}/image
+          push: true
+          tags: ${{ env.TAGS }}
+          build-args: REVISION=${{ env.SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          { echo "### Server image"; echo; while read -r tag; do echo "- \`$tag\`"; done <<<"$TAGS"; } >> "$GITHUB_STEP_SUMMARY"

@@ -49,6 +49,7 @@ spec:
               plugins/Core/config.yml .core.nats.enabled true
               plugins/Core/config.yml .core.nats.url nats://nats:4222
               plugins/Core/config.yml .core.nats.replicas 3
+              plugins/Core/config.yml .core.metrics.enabled true
           - name: ASSETS_BUCKET
             valueFrom:
               secretKeyRef: {name: assets, key: bucket, optional: true}
@@ -116,6 +117,7 @@ spec:
               plugins/Core/config.yml .core.nats.enabled true
               plugins/Core/config.yml .core.nats.url nats://nats:4222
               plugins/Core/config.yml .core.nats.replicas 3
+              plugins/Core/config.yml .core.metrics.enabled true
           - name: ASSETS_BUCKET
             valueFrom:
               secretKeyRef: {name: assets, key: bucket, optional: true}
@@ -183,6 +185,7 @@ spec:
               plugins/Core/config.yml .core.nats.enabled true
               plugins/Core/config.yml .core.nats.url nats://nats:4222
               plugins/Core/config.yml .core.nats.replicas 3
+              plugins/Core/config.yml .core.metrics.enabled true
               plugins/Core/config.yml .core.agones.campSlots 6
               plugins/Clans/config.yml .clans.camp.visitors 4
           - name: ASSETS_BUCKET
@@ -252,6 +255,7 @@ spec:
               plugins/Core/config.yml .core.nats.enabled true
               plugins/Core/config.yml .core.nats.url nats://nats:4222
               plugins/Core/config.yml .core.nats.replicas 3
+              plugins/Core/config.yml .core.metrics.enabled true
           - name: ASSETS_BUCKET
             valueFrom:
               secretKeyRef: {name: assets, key: bucket, optional: true}
@@ -319,6 +323,7 @@ spec:
               plugins/Core/config.yml .core.nats.enabled true
               plugins/Core/config.yml .core.nats.url nats://nats:4222
               plugins/Core/config.yml .core.nats.replicas 3
+              plugins/Core/config.yml .core.metrics.enabled true
           - name: ASSETS_BUCKET
             valueFrom:
               secretKeyRef: {name: assets, key: bucket, optional: true}

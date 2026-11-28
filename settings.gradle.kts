@@ -22,6 +22,7 @@ include(":sessions-service")
 include(":clans-protocol")
 include(":clans-service")
 include(":proxy")
+include(":metrics")
 
 if (File("./private/").exists()) {
     include(":private:events")
@@ -150,6 +151,9 @@ dependencyResolutionManagement {
             library("testcontainers", "org.testcontainers", "testcontainers").version("2.0.5")
             library("testcontainers-postgresql", "org.testcontainers", "testcontainers-postgresql").version("2.0.5")
             library("testcontainers-junit", "org.testcontainers", "testcontainers-junit-jupiter").version("2.0.5")
+
+            // Library - Metrics
+            library("micrometer-prometheus", "io.micrometer", "micrometer-registry-prometheus").version("1.18.0")
 
             // Bundled Libraries
             bundle("test", listOf("junit-jupiter", "mockbukkit", "paper-api-test"))

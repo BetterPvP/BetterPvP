@@ -23,6 +23,7 @@ spec:
     metadata:
       labels:
         app: ledger-service
+        betterpvp.net/metrics: "true"
     spec:
       imagePullSecrets:
         - name: ghcr
@@ -30,6 +31,9 @@ spec:
         - name: ledger-service
           image: __IMAGE__
           imagePullPolicy: __PULL_POLICY__
+          ports:
+            - name: metrics
+              containerPort: 9464
           env:
             - name: LEDGER_NATS_URL
               value: nats://nats:4222

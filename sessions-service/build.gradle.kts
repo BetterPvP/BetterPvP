@@ -7,6 +7,7 @@ group = "me.mykindos.betterpvp.sessions.service"
 description = "Standalone sessions service, which decides which server owns each player"
 
 dependencies {
+    implementation(project(":metrics"))
     implementation(project(":sessions"))
     compileOnly(libs.lombok)
     annotationProcessor(libs.lombok)

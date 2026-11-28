@@ -1,0 +1,35 @@
+# Prometheus scrapes the metrics port of every Paper server and network service in bpvp.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: bpvp-servers
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - bpvp
+  selector:
+    matchExpressions:
+      - key: betterpvp.net/role
+        operator: Exists
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: bpvp-services
+  namespace: monitoring
+spec:
+  namespaceSelector:
+    matchNames:
+      - bpvp
+  selector:
+    matchLabels:
+      betterpvp.net/metrics: "true"
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

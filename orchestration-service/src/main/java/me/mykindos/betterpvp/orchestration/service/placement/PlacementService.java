@@ -4,6 +4,7 @@ import io.nats.client.Connection;
 import io.nats.client.ConnectionListener;
 import io.nats.client.Nats;
 import io.nats.client.Options;
+import lombok.Getter;
 import lombok.extern.java.Log;
 
 import javax.net.ssl.SSLContext;
@@ -24,6 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 @Log
 public final class PlacementService implements AutoCloseable {
 
+    @Getter
     private final Connection connection;
     private final PlacementResponder responder;
 

@@ -7,6 +7,7 @@ group = "me.mykindos.betterpvp.clans.service"
 description = "Standalone service that is the only writer of clans, members, ranks, relations and camp permissions"
 
 dependencies {
+    implementation(project(":metrics"))
     implementation(project(":clans-protocol"))
     implementation(project(":network-protocol"))
     implementation(libs.jnats)

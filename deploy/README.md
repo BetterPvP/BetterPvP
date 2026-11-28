@@ -12,6 +12,10 @@ One command runs the whole network on your machine in a k3d cluster:
 | Velocity | 2 proxies with the BetterPvP proxy plugin, on `localhost:25565` |
 | Paper | the server image, one fleet per role |
 | Services | Placement (`orchestration-service`), `clans-service`, `ledger-service`, `sessions-service` |
+| kube-prometheus-stack | chart 94.2.0: Prometheus, Grafana, Alertmanager |
+| Loki | chart 7.7.0, one process |
+| Alloy | chart 1.16.0, one per node |
+| Headlamp | chart 0.46.0 |
 
 ## Needs
 
@@ -49,6 +53,7 @@ It creates the cluster `bpvp`, installs everything and starts the fleets. Run it
 | `ROLES` | `hub resource camp dungeon event` | The role fleets to run. The others are stopped |
 | `BUFFER_MAX` | | The most servers any role's autoscaler may run, for a small machine |
 | `CLUSTER` | `bpvp` | The k3d cluster name |
+| `OBSERVABILITY` | `1` | `0` to leave out Prometheus, Grafana, Loki, Alloy and Headlamp, which take about 2 GB |
 
 The script turns these into Kubernetes secrets in the `bpvp` namespace. Nothing secret is in this folder.
 
@@ -111,6 +116,47 @@ Every service and server uses the NATS prefix `bpvp`. Change it in all of them a
 A new service: add `manifests/services/<name>.yaml` with `__IMAGE__` and `__PULL_POLICY__` where the image goes, add it to `SERVICES` and to the `Service images` workflow's list.
 
 Each server's name (`core.info.server`) is its GameServer's name, which Placement sends camps to.
+
+## Observability
+
+Everything here runs in the `monitoring` namespace unless `OBSERVABILITY=0`. Metrics are kept for 7 days and logs for 7 days, both only until their pod restarts.
+
+Every Paper server serves its metrics on port 9464 (`core.metrics.enabled` and `core.metrics.port`), and every service on `METRICS_PORT` (9464). Prometheus finds them through the PodMonitors in `manifests/monitoring/podmonitors.yaml`. Alloy sends every pod's log to Loki.
+
+| Metric | What it is |
+|---|---|
+| `bpvp_server_players` | Players online |
+| `bpvp_server_mspt` | Average milliseconds per tick over the last 100 ticks |
+| `bpvp_server_tps` | Ticks per second over the last minute |
+| `bpvp_server_heap_post_gc_bytes` | Heap still in use after each pool's last collection |
+| `jvm_*`, `process_*` | Memory, GC, threads and CPU of every server and service |
+| `nats_*` | Messages, bytes, drops and reconnects of each service's NATS connection |
+
+Server metrics carry `server` (the pod name) and `role`. Service metrics carry `service`.
+
+Grafana has the dashboard `BetterPvP network` from `manifests/monitoring/dashboards`. A new dashboard JSON in that folder is picked up on the next `up.sh`.
+
+```bash
+kubectl -n monitoring port-forward svc/monitoring-grafana 3000:80
+kubectl -n monitoring get secret grafana-admin -o jsonpath='{.data.admin-password}' | base64 -d
+```
+
+Then open `localhost:3000` and sign in as `admin` with that password.
+
+Headlamp shows the whole cluster:
+
+```bash
+kubectl -n monitoring port-forward svc/headlamp 4466:80
+kubectl -n monitoring create token headlamp
+```
+
+Open `localhost:4466` and paste the token.
+
+To remove it all from a running cluster:
+
+```bash
+helm -n monitoring uninstall headlamp alloy loki monitoring
+```
 
 ## Look around
 

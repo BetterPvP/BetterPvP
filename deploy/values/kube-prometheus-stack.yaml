@@ -1,0 +1,45 @@
+# Prometheus, Grafana, Alertmanager, kube-state-metrics and node-exporter in the monitoring namespace.
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    # Read every PodMonitor, ServiceMonitor and rule in the cluster, not only the ones from this release.
+    podMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    probeSelectorNilUsesHelmValues: false
+    scrapeConfigSelectorNilUsesHelmValues: false
+    resources:
+      requests:
+        memory: 400Mi
+      limits:
+        memory: 1Gi
+
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      limits:
+        memory: 128Mi
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+  defaultDashboardsTimezone: browser
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki:3100
+  resources:
+    limits:
+      memory: 384Mi
+
+# k3s runs these inside the k3s process, where they cannot be scraped one by one.
+kubeEtcd:
+  enabled: false
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeProxy:
+  enabled: false

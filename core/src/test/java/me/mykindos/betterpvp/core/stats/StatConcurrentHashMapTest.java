@@ -216,6 +216,17 @@ class StatConcurrentHashMapTest {
     }
 
     @Test
+    @DisplayName("get: a stat recorded on one server is read back on another server in the same realm")
+    void get_sharedRealmAcrossServers() {
+        Realm loaded = new Realm(1, new Server(5, "network"), season);
+        Realm otherServer = new Realm(1, new Server(9, "resource-abc12"), season);
+        map.put(loaded, stat1, 40L, true);
+        map.increase(otherServer, stat1, 2L);
+        assertEquals(42L, map.get(StatFilterType.REALM, loaded, stat1));
+        assertEquals(42L, map.get(StatFilterType.SEASON, season, stat1));
+    }
+
+    @Test
     @DisplayName("get: REALM returns only that realm's value")
     void get_realmIsolated() {
         Season season2 = new Season(2, "S2", LocalDate.now().plusYears(1));

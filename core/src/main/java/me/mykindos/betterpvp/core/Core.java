@@ -192,7 +192,8 @@ public class Core extends BPvPPlugin {
         final int currentSeason = getConfig().getOrSaveInt("core.info.season", 1);
         final String seasonName = getConfig().getOrSaveString("core.info.seasonName", "Season 1");
         final Season season = database.getOrCreateSeason(currentSeason, seasonName);
-        int realmId = database.getRealmId(server.getId(), currentSeason);
+        final String realmName = getConfig().getOrSaveString("core.info.realm", serverName);
+        int realmId = database.getRealmId(database.getServerId(realmName), currentSeason);
         setCurrentRealm(new Realm(realmId, server, season));
         me.mykindos.betterpvp.core.utilities.SnowflakeIdGenerator.ID_GENERATOR.updateIds();
     }

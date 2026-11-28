@@ -27,7 +27,7 @@ The entrypoint prepares `/data` and starts Paper:
 
 1. Installs the plugin jars, minus the ones `roles.json` drops for the role.
 2. Copies every file mounted under `/config` over `/data`. `${CFG_NAME}` in a text file becomes the value of `CFG_NAME`.
-3. Writes the database and server name into `plugins/Core/config.yml`.
+3. Writes the database, server name and realm into `plugins/Core/config.yml`.
 4. Pulls the build assets when `ASSETS_BUCKET` is set.
 5. Starts Paper with `--world-container worlds`.
 
@@ -37,6 +37,7 @@ Under Agones (`AGONES_SDK_HTTP_PORT` is set) the entrypoint also reports health 
 |---|---|---|
 | `BPVP_ROLE` | `all` | `all`, `hub`, `resource`, `camp`, `dungeon` or `event` |
 | `BPVP_SERVER_NAME` | the pod or host name | `core.info.server` |
+| `BPVP_REALM` | `network` | `core.info.realm`. Servers with the same realm share clans, stats and achievements for the season |
 | `BPVP_DB_HOST` | | Postgres as `host:port`. Unset, the database settings are left as they are |
 | `BPVP_DB_NAME` | `betterpvp` | |
 | `BPVP_DB_USER` | `betterpvp` | |

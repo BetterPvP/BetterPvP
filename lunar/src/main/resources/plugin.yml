@@ -1,9 +1,0 @@
-author: Moonsworth LLC Development Team, Mykindos
-main: me.mykindos.betterpvp.lunar.Lunar
-name: Lunar
-load: POSTWORLD
-version: '1.0'
-api-version: '26.3'
-depend: [Core, Apollo-Bukkit]
-softdepend: [Clans]
-website: https://www.lunarclient.com/

@@ -5,7 +5,6 @@ val outputBuckets = mapOf(
         ":champions",
         ":clans",
         ":core",
-        ":lunar",
         ":private:compatability",
         ":private:dungeons",
         ":private:events",
@@ -17,14 +16,12 @@ val outputBuckets = mapOf(
         ":champions",
         ":core",
         ":hub",
-        ":lunar",
         ":private:store",
     ),
     "champions" to setOf(
         ":champions",
         ":core",
         ":game",
-        ":lunar",
         ":private:store",
         ":private:compatability"
     ),

@@ -3,12 +3,8 @@ plugins {
 }
 
 version = "1.0.0"
-group = "me.mykindos.betterpvp.lunar"
-description = "Lunar Client API-accessor plugin for BetterPvP"
-
-repositories {
-    maven { url = uri("https://repo.lunarclient.dev") }
-}
+group = "me.mykindos.betterpvp.hub"
+description = "Hub plugin for BetterPvP"
 
 dependencies {
     compileOnly(libs.bundles.paper)

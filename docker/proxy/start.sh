@@ -27,4 +27,9 @@ hub_site = "${BPVP_HUB_SITE:-hub}"
 TOML
 fi
 
+# Behind a load balancer that hides the player's address, Mojang rejects every join unless this is off.
+if [[ -n ${BPVP_PREVENT_CLIENT_PROXY_CONNECTIONS:-} && -f $dir/velocity.toml ]]; then
+  sed -i -E "s/^prevent-client-proxy-connections = .*/prevent-client-proxy-connections = $BPVP_PREVENT_CLIENT_PROXY_CONNECTIONS/" "$dir/velocity.toml"
+fi
+
 exec /__cacert_entrypoint.sh /usr/bin/run-bungeecord.sh "$@"

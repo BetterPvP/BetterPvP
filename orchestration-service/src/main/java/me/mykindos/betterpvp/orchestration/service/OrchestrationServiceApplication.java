@@ -23,6 +23,10 @@ public final class OrchestrationServiceApplication {
     public static void main(String[] args) throws IOException {
         final Path configPath = Path.of(System.getProperty("orchestration.config", "config.toml"));
         final OrchestrationServiceConfig config = OrchestrationServiceConfig.load(configPath);
+        // Placement connects first, so a failed connect ends the process before any other thread keeps it alive.
+        final PlacementConfig placementConfig = PlacementConfig.from(Toml.parse(configPath));
+        final PlacementService placement = placementConfig.isEnabled() ? PlacementService.start(placementConfig) : null;
+
         final InMemoryOrchestrationGateway gateway = new InMemoryOrchestrationGateway(
                 new QueuePriorityPolicy(
                         config.boostIntervalSeconds(),
@@ -39,8 +43,6 @@ public final class OrchestrationServiceApplication {
         server.setExecutor(Executors.newCachedThreadPool());
         server.start();
 
-        final PlacementConfig placementConfig = PlacementConfig.from(Toml.parse(configPath));
-        final PlacementService placement = placementConfig.isEnabled() ? PlacementService.start(placementConfig) : null;
         final Runnable stop = () -> {
             gateway.shutdown();
             if (placement != null) {

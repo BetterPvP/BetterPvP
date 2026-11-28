@@ -13,7 +13,7 @@ out=${1:?usage: stage.sh <context-dir>}
 here=$(cd "$(dirname "$0")" && pwd)
 list=${PLUGINS_LIST:-plugins.json}
 jars=${JARS_DIR:-build/clans}
-skip=" lunar compatability "
+skip=" compatability "
 assets_version=${ASSETS_VERSION:-v1.1.0}
 
 rm -rf "$out"

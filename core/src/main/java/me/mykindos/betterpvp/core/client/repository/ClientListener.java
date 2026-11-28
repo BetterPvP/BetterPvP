@@ -15,7 +15,6 @@ import me.mykindos.betterpvp.core.client.properties.ClientProperty;
 import me.mykindos.betterpvp.core.client.properties.ClientPropertyUpdateEvent;
 import me.mykindos.betterpvp.core.combat.attack.MeleeCombatSettings;
 import me.mykindos.betterpvp.core.config.Config;
-import me.mykindos.betterpvp.core.framework.events.lunar.LunarClientEvent;
 import me.mykindos.betterpvp.core.framework.sidebar.SidebarMode;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
@@ -234,12 +233,6 @@ public class ClientListener implements Listener {
         client.putProperty(ClientProperty.LAST_LOGIN, System.currentTimeMillis());
         client.setConnectionTime(System.currentTimeMillis());
         log.info("{} ({}) quit", event.getPlayer().getName(), event.getPlayer().getUniqueId()).submit();
-    }
-
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onLunarEvent(LunarClientEvent event) {
-        Client client = clientManager.search().online(event.getPlayer());
-        client.putProperty(ClientProperty.LUNAR, event.isRegistered());
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

@@ -5,6 +5,8 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.Material;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.concurrent.CompletableFuture;
+
 /**
  * A non-item value that can be put on the table in a trade.
  * <p>
@@ -44,6 +46,9 @@ public interface TradeCurrency {
      * held per-clan rather than per-gamer, and settlement should not have to know.
      * <p>
      * Callers guarantee {@code from} has been checked against {@link #getBalance} in the same tick.
+     *
+     * @return whether the amount moved, completed on the main thread
      */
-    void transfer(@NotNull Gamer from, @NotNull Gamer to, int amount);
+    @NotNull
+    CompletableFuture<Boolean> transfer(@NotNull Gamer from, @NotNull Gamer to, int amount);
 }

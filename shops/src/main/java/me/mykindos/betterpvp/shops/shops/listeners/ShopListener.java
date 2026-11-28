@@ -11,6 +11,8 @@ import me.mykindos.betterpvp.core.components.shops.events.FinalPlayerBuyItemEven
 import me.mykindos.betterpvp.core.components.shops.events.FinalPlayerSellItemEvent;
 import me.mykindos.betterpvp.core.components.shops.events.PlayerBuyItemEvent;
 import me.mykindos.betterpvp.core.components.shops.events.PlayerSellItemEvent;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.inventory.inventory.Inventory;
 import me.mykindos.betterpvp.core.inventory.inventory.VirtualInventory;
@@ -24,6 +26,8 @@ import me.mykindos.betterpvp.core.utilities.UtilInventory;
 import me.mykindos.betterpvp.core.utilities.UtilItem;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilWorld;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
+import me.mykindos.betterpvp.ledger.LedgerStatus;
 import me.mykindos.betterpvp.shops.shops.ShopManager;
 import me.mykindos.betterpvp.shops.shops.items.DynamicShopItem;
 import me.mykindos.betterpvp.shops.shops.items.ShopItem;
@@ -53,10 +57,12 @@ public class ShopListener implements Listener {
     private final ClientManager clientManager;
     private final ShopItemSellService shopItemSellService;
     private final ShopManager shopManager;
+    private final Ledger ledger;
 
     @Inject
     public ShopListener(ItemRegistry registry, ItemFactory itemFactory, ClientManager clientManager,
-                        ShopItemSellService shopItemSellService, ShopManager shopManager) {
+                        ShopItemSellService shopItemSellService, ShopManager shopManager, Ledger ledger) {
+        this.ledger = ledger;
         this.registry = registry;
         this.itemFactory = itemFactory;
         this.clientManager = clientManager;
@@ -70,6 +76,10 @@ public class ShopListener implements Listener {
         int cost = event.getShopItem().getBuyPrice() * requestedAmount;
 
         if (event.getCurrency() == ShopCurrency.COINS) {
+            if (!ledger.isAvailable()) {
+                event.cancel("core.ledger.unavailable");
+                return;
+            }
             if (event.getGamer().getIntProperty(GamerProperty.BALANCE) < cost) {
                 event.cancel("shops.purchase.insufficient-funds");
                 return;
@@ -100,12 +110,23 @@ public class ShopListener implements Listener {
         int amount = event.getRequestedAmount();
         int cost = amount * shopItem.getBuyPrice();
         if (event.getCurrency() == ShopCurrency.COINS) {
-            event.getGamer().saveProperty(GamerProperty.BALANCE.name(), event.getGamer().getIntProperty(GamerProperty.BALANCE) - cost);
-        } else if (event.getCurrency() == ShopCurrency.BARK) {
-            Player player = event.getPlayer();
-            UtilInventory.remove(player, "progression:tree_bark", cost);
+            ledger.move(LedgerParty.of(event.getGamer()), LedgerParty.system(LedgerAccounts.SHOP), cost, "shop.buy").thenAccept(receipt -> {
+                if (!receipt.isPosted()) {
+                    UtilMessage.message(event.getPlayer(), "shops.prefix", receipt.getStatus() == LedgerStatus.INSUFFICIENT_FUNDS
+                            ? "shops.purchase.insufficient-funds" : "core.ledger.unavailable");
+                    return;
+                }
+                deliverPurchase(event, amount, cost);
+            });
+            return;
         }
+        if (event.getCurrency() == ShopCurrency.BARK) {
+            UtilInventory.remove(event.getPlayer(), "progression:tree_bark", cost);
+        }
+        deliverPurchase(event, amount, cost);
+    }
 
+    private void deliverPurchase(PlayerBuyItemEvent event, int amount, int cost) {
         if (event.getShopItem() instanceof DynamicShopItem dynamicShopItem) {
             setCurrentStockAndNotify(dynamicShopItem, Math.max(0, dynamicShopItem.getCurrentStock() - amount));
         }
@@ -145,6 +166,10 @@ public class ShopListener implements Listener {
     public void onSellItem(PlayerSellItemEvent event) {
         if (event.getShopItem().getSellPrice() == 0) {
             event.cancel("shops.sell.cannot-sell");
+            return;
+        }
+        if (event.getCurrency() == ShopCurrency.COINS && !ledger.isAvailable()) {
+            event.cancel("core.ledger.unavailable");
             return;
         }
 
@@ -214,8 +239,13 @@ public class ShopListener implements Listener {
         int totalEarned = totalSold * shopItem.getSellPrice();
         String itemName = shopItemSellService.getItemName(shopItem);
 
-        event.getGamer().saveProperty(GamerProperty.BALANCE.name(),
-                event.getGamer().getIntProperty(GamerProperty.BALANCE) + totalEarned);
+        ledger.move(LedgerParty.system(LedgerAccounts.SHOP), LedgerParty.of(event.getGamer()), totalEarned, "shop.sell")
+                .thenAccept(receipt -> {
+                    if (!receipt.isPosted()) {
+                        log.error("{} sold {}x {} but the ledger refused their {} coins: {}", player.getName(), totalSold,
+                                itemName, totalEarned, receipt.getStatus()).submit();
+                    }
+                });
 
         if (shopItem instanceof DynamicShopItem dynamicShopItem) {
             setCurrentStockAndNotify(dynamicShopItem, Math.min(dynamicShopItem.getMaxStock(),

@@ -3,9 +3,10 @@ package me.mykindos.betterpvp.core.framework.economy;
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.framework.CoreNamespaceKeys;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.model.SoundEffect;
@@ -13,6 +14,7 @@ import me.mykindos.betterpvp.core.utilities.model.display.component.TimedCompone
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.TextComponent;
 import net.kyori.adventure.text.format.TextColor;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import org.bukkit.Sound;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -43,10 +45,12 @@ public class CoinPickupListener implements Listener {
 
 
     private final ClientManager clientManager;
+    private final Ledger ledger;
 
     @Inject
-    public CoinPickupListener(ClientManager clientManager) {
+    public CoinPickupListener(ClientManager clientManager, Ledger ledger) {
         this.clientManager = clientManager;
+        this.ledger = ledger;
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
@@ -76,19 +80,21 @@ public class CoinPickupListener implements Listener {
             return;
         }
 
-        final Gamer gamer = this.clientManager.search().online(player).getGamer();
-
-        final int coins = coinsOpt.getAsInt();
-
-        // Success
-        event.getItem().remove();
         event.setCancelled(true);
+        // Coins stay on the ground while they could not be credited.
+        if (!ledger.isAvailable()) {
+            return;
+        }
 
-        int newBalance = gamer.getBalance() + coins;
-        gamer.saveProperty(GamerProperty.BALANCE, newBalance);
-        new SoundEffect(Sound.ENTITY_ARROW_HIT_PLAYER, 2.0f, 2f).play(player);
-        final TextComponent text = Component.text("+" + UtilFormat.formatNumber(coins) + " Coins!", TextColor.color(255, 215, 0));
-        gamer.getActionBar().add(5, new TimedComponent(2, true, gmr -> text));
+        final Gamer gamer = this.clientManager.search().online(player).getGamer();
+        final int coins = coinsOpt.getAsInt();
+        event.getItem().remove();
+
+        ledger.move(LedgerParty.system(LedgerAccounts.WORLD), LedgerParty.of(gamer), coins, "coin.pickup").thenAccept(receipt -> {
+            if (receipt.isPosted() && player.isOnline()) {
+                notify(gamer, coins);
+            }
+        });
     }
 
 }

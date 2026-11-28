@@ -13,18 +13,14 @@ core:
       ip: 127.0.0.1:5002
       maxPoolSize: 10
   network:
-    # Which implementation carries each of these. 'auto' takes Redis when it is reachable and the proxy otherwise.
+    # Which implementation carries each of these. 'auto' takes NATS when it is configured and the local or proxy one otherwise.
     # Another network registers its own names through NetworkTransports and they can be named here.
     bus: auto
     directory: auto
     transfer: auto
-  redis:
-    # When off, messages between servers go through the proxy instead, which only works while somebody is online.
-    enabled: false
-    host: 127.0.0.1
-    port: 6379
-    password: ''
-    channel: betterpvp:bus
+  agones:
+    # How many camps a camp server holds at once.
+    campSlots: 6
   tips:
     timeBetweenTips: 150.0
   exceptions:

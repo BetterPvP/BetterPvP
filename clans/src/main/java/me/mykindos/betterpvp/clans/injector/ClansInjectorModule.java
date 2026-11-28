@@ -10,6 +10,7 @@ import me.mykindos.betterpvp.clans.clans.fatigue.factor.FatigueFactor;
 import me.mykindos.betterpvp.clans.clans.fatigue.factor.PlayerDeathFactor;
 import me.mykindos.betterpvp.clans.clans.fatigue.factor.RepeatKillerFactor;
 import me.mykindos.betterpvp.clans.clans.fatigue.punishment.FatiguePunishment;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWritingModule;
 import me.mykindos.betterpvp.clans.clans.fatigue.punishment.SlownessPunishment;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampProfessions;
 import me.mykindos.betterpvp.clans.world.camp.settler.CampSettlers;
@@ -22,6 +23,7 @@ import me.mykindos.betterpvp.clans.world.camp.upgrade.CasualtyStore;
 import me.mykindos.betterpvp.clans.world.camp.upgrade.DatabaseCasualtyStore;
 import me.mykindos.betterpvp.clans.world.camp.upgrade.FeastTable;
 import me.mykindos.betterpvp.clans.world.camp.upgrade.GreatBell;
+import me.mykindos.betterpvp.core.framework.role.RoleGate;
 
 public class ClansInjectorModule extends AbstractModule {
 
@@ -58,6 +60,7 @@ public class ClansInjectorModule extends AbstractModule {
         Multibinder.newSetBinder(binder(), MoraleBoost.class).addBinding().to(GreatBell.class);
         bind(ProsperityStore.class).to(DatabaseProsperityStore.class);
         bind(CasualtyStore.class).to(DatabaseCasualtyStore.class);
+        install(new ClanWritingModule(RoleGate.current().getRole()));
 
     }
 

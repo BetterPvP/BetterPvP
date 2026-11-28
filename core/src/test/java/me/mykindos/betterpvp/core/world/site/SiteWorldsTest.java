@@ -17,7 +17,7 @@ class SiteWorldsTest {
 
     private static final UUID INSTANCE = UUID.fromString("0123abcd-0000-0000-0000-000000000000");
 
-    private final SiteWorlds worlds = new SiteWorlds(mock(Core.class));
+    private final SiteWorlds worlds = new SiteWorlds(mock(Core.class), mock(SlimeWorlds.class));
 
     private static Site site(String id, WorldSource source) {
         return new Site(id, Component.text(id), Material.GRASS_BLOCK, source, SitePolicy.builder().build(),
@@ -53,5 +53,14 @@ class SiteWorldsTest {
         assertEquals("camps/42", worlds.worldNameFor(camp, camp.keyFor(42L), UUID.randomUUID()));
         assertNotEquals(worlds.worldNameFor(camp, camp.keyFor(42L), INSTANCE),
                 worlds.worldNameFor(camp, camp.keyFor(43L), INSTANCE));
+    }
+
+    @Test
+    @DisplayName("a slime site is named per owner, the same as an owned one")
+    void slimeWorldsAreKeyedByOwner() {
+        final Site camp = site("camp", WorldSource.slime("camps/", "templates/camp"));
+
+        assertEquals("camps/42", worlds.worldNameFor(camp, camp.keyFor(42L), INSTANCE));
+        assertEquals("camps/42", worlds.worldNameFor(camp, camp.keyFor(42L), UUID.randomUUID()));
     }
 }

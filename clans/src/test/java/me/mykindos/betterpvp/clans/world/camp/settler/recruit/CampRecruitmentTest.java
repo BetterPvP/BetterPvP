@@ -57,6 +57,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -147,7 +148,7 @@ class CampRecruitmentTest {
 
         when(clanManager.getClanById(CLAN)).thenReturn(Optional.of(clan));
         when(permissions.allows(any(Player.class), eq(CLAN), eq(SettlerAction.HIRE))).thenReturn(true);
-        when(coins.take(any(), anyLong())).thenReturn(true);
+        when(coins.take(any(), anyLong())).thenReturn(CompletableFuture.completedFuture(true));
 
         guestQuarters = new GuestQuarters(new CampUpgrades(store), store, permissions);
         final TraitRegistry traits = new TraitRegistry();
@@ -521,7 +522,7 @@ class CampRecruitmentTest {
         final List<SettlerCandidate> first = List.copyOf(recruitment.board(SITE));
         now.addAndGet(5 * HOUR);
 
-        assertNull(recruitment.reroll(player, SITE));
+        assertNull(recruitment.reroll(player, SITE).join());
         verify(coins).take(player, 2_000);
         assertNotEquals(first, recruitment.board(SITE));
         assertEquals(now.get() + 12 * HOUR, recruitment.boardRefreshAt(SITE));
@@ -532,13 +533,13 @@ class CampRecruitmentTest {
         final List<SettlerCandidate> first = List.copyOf(recruitment.board(SITE));
 
         when(permissions.allows(any(Player.class), eq(CLAN), eq(SettlerAction.HIRE))).thenReturn(false);
-        assertEquals("clans.settler.card.not_allowed", recruitment.reroll(player, SITE));
+        assertEquals("clans.settler.card.not_allowed", recruitment.reroll(player, SITE).join());
         verify(coins, never()).take(any(), anyLong());
         assertEquals(first, recruitment.board(SITE));
 
         when(permissions.allows(any(Player.class), eq(CLAN), eq(SettlerAction.HIRE))).thenReturn(true);
-        when(coins.take(any(), anyLong())).thenReturn(false);
-        assertEquals("clans.settler.recruit.cannot_afford_reroll", recruitment.reroll(player, SITE));
+        when(coins.take(any(), anyLong())).thenReturn(CompletableFuture.completedFuture(false));
+        assertEquals("clans.settler.recruit.cannot_afford_reroll", recruitment.reroll(player, SITE).join());
         assertEquals(first, recruitment.board(SITE));
     }
 
@@ -548,7 +549,7 @@ class CampRecruitmentTest {
         final SettlerCandidate kept = recruitment.board(SITE).get(2);
         assertNull(guestQuarters.toggle(player, SITE, kept.getSettler().getId()));
 
-        assertNull(recruitment.reroll(player, SITE));
+        assertNull(recruitment.reroll(player, SITE).join());
         assertTrue(recruitment.board(SITE).contains(kept));
         assertEquals(4, recruitment.board(SITE).size());
 
@@ -567,14 +568,14 @@ class CampRecruitmentTest {
         assertNull(camp.getReservedCandidate());
 
         assertNull(guestQuarters.toggle(player, SITE, hired));
-        assertTrue(recruitment.hire(player, SITE, hired).isSuccess());
-        assertNull(recruitment.reroll(player, SITE));
+        assertTrue(recruitment.hire(player, SITE, hired).join().isSuccess());
+        assertNull(recruitment.reroll(player, SITE).join());
         assertNull(camp.getReservedCandidate());
 
         final UUID turned = recruitment.board(SITE).getFirst().getSettler().getId();
         assertNull(guestQuarters.toggle(player, SITE, turned));
         assertTrue(recruitment.turnAway(player, SITE, turned).isSuccess());
-        assertNull(recruitment.reroll(player, SITE));
+        assertNull(recruitment.reroll(player, SITE).join());
         assertNull(camp.getReservedCandidate());
     }
 
@@ -585,19 +586,19 @@ class CampRecruitmentTest {
         assertEquals("clans.camp.upgrade.guest_quarters.inactive",
                 guestQuarters.toggle(player, SITE, candidate.getSettler().getId()));
         camp.setReservedCandidate(candidate.getSettler().getId());
-        assertNull(recruitment.reroll(player, SITE));
+        assertNull(recruitment.reroll(player, SITE).join());
         assertFalse(recruitment.board(SITE).contains(candidate));
         assertNull(camp.getReservedCandidate());
     }
 
     @Test
     void ac19_aCandidateNotThereOrExpiredIsGone() {
-        assertEquals("clans.settler.recruit.gone", reason(recruitment.hire(player, SITE, UUID.randomUUID())));
+        assertEquals("clans.settler.recruit.gone", reason(recruitment.hire(player, SITE, UUID.randomUUID()).join()));
 
         landABoat();
         final UUID waiting = camp.getArrivals().getFirst().getSettler().getId();
         now.addAndGet(2 * HOUR);
-        assertEquals("clans.settler.recruit.gone", reason(recruitment.hire(player, SITE, waiting)));
+        assertEquals("clans.settler.recruit.gone", reason(recruitment.hire(player, SITE, waiting).join()));
         verify(coins, never()).take(any(), anyLong());
     }
 
@@ -607,15 +608,15 @@ class CampRecruitmentTest {
 
         when(permissions.allows(any(Player.class), eq(CLAN), eq(SettlerAction.HIRE))).thenReturn(false);
         when(settlers.populationCap(SITE)).thenReturn(0);
-        when(coins.take(any(), anyLong())).thenReturn(false);
-        assertEquals("clans.settler.card.not_allowed", reason(recruitment.hire(player, SITE, id)));
+        when(coins.take(any(), anyLong())).thenReturn(CompletableFuture.completedFuture(false));
+        assertEquals("clans.settler.card.not_allowed", reason(recruitment.hire(player, SITE, id).join()));
 
         when(permissions.allows(any(Player.class), eq(CLAN), eq(SettlerAction.HIRE))).thenReturn(true);
-        assertEquals("core.settler.population_full", reason(recruitment.hire(player, SITE, id)));
+        assertEquals("core.settler.population_full", reason(recruitment.hire(player, SITE, id).join()));
         verify(coins, never()).take(any(), anyLong());
 
         when(settlers.populationCap(SITE)).thenReturn(6);
-        assertEquals("clans.settler.recruit.cannot_afford", reason(recruitment.hire(player, SITE, id)));
+        assertEquals("clans.settler.recruit.cannot_afford", reason(recruitment.hire(player, SITE, id).join()));
 
         verify(coins, never()).give(any(), anyLong());
         verify(settlers, never()).grant(any(), any());
@@ -628,7 +629,7 @@ class CampRecruitmentTest {
         final SettlerCandidate candidate = recruitment.board(SITE).getFirst();
         final UUID id = candidate.getSettler().getId();
 
-        assertTrue(recruitment.hire(player, SITE, id).isSuccess());
+        assertTrue(recruitment.hire(player, SITE, id).join().isSuccess());
         verify(coins).take(player, 4_000);
         verify(settlers).grant(SITE, candidate.getSettler());
         assertTrue(recruitment.find(SITE, id).isEmpty());
@@ -646,7 +647,7 @@ class CampRecruitmentTest {
         landABoat();
         final UUID id = camp.getArrivals().getFirst().getSettler().getId();
 
-        assertTrue(recruitment.hire(player, SITE, id).isSuccess());
+        assertTrue(recruitment.hire(player, SITE, id).join().isSuccess());
         verify(coins).take(player, 15_000);
         assertEquals(1, camp.getArrivals().size());
     }
@@ -656,7 +657,7 @@ class CampRecruitmentTest {
         final UUID id = recruitment.board(SITE).getFirst().getSettler().getId();
         when(settlers.grant(any(), any())).thenReturn(SettlerResult.refused("core.settler.already_granted"));
 
-        assertFalse(recruitment.hire(player, SITE, id).isSuccess());
+        assertFalse(recruitment.hire(player, SITE, id).join().isSuccess());
         verify(coins).give(player, 5_000);
         assertTrue(recruitment.find(SITE, id).isPresent(), "a hire that fell through leaves them waiting");
         assertTrue(events.stream().noneMatch(SettlerHiredEvent.class::isInstance));
@@ -674,14 +675,14 @@ class CampRecruitmentTest {
         assertEquals(0, recruitment.price(SITE, camp.getArrivals().getFirst()));
 
         when(permissions.allows(any(Player.class), eq(CLAN), eq(SettlerAction.HIRE))).thenReturn(false);
-        assertEquals("clans.settler.card.not_allowed", reason(recruitment.hire(player, SITE, id)));
+        assertEquals("clans.settler.card.not_allowed", reason(recruitment.hire(player, SITE, id).join()));
 
         when(permissions.allows(any(Player.class), eq(CLAN), eq(SettlerAction.HIRE))).thenReturn(true);
         when(settlers.populationCap(SITE)).thenReturn(0);
-        assertEquals("core.settler.population_full", reason(recruitment.hire(player, SITE, id)));
+        assertEquals("core.settler.population_full", reason(recruitment.hire(player, SITE, id).join()));
 
         when(settlers.populationCap(SITE)).thenReturn(6);
-        assertTrue(recruitment.hire(player, SITE, id).isSuccess());
+        assertTrue(recruitment.hire(player, SITE, id).join().isSuccess());
     }
 
     @Test
@@ -712,9 +713,9 @@ class CampRecruitmentTest {
         final SiteKey closed = Camps.keyFor(99);
         final UUID id = UUID.randomUUID();
 
-        assertEquals("core.settler.not_loaded", reason(recruitment.hire(player, closed, id)));
+        assertEquals("core.settler.not_loaded", reason(recruitment.hire(player, closed, id).join()));
         assertEquals("core.settler.not_loaded", reason(recruitment.turnAway(player, closed, id)));
-        assertEquals("core.settler.not_loaded", recruitment.reroll(player, closed));
+        assertEquals("core.settler.not_loaded", recruitment.reroll(player, closed).join());
     }
 
     @Test
@@ -722,7 +723,7 @@ class CampRecruitmentTest {
         final UUID id = recruitment.board(SITE).getFirst().getSettler().getId();
         when(settlers.roster(SITE)).thenReturn(Optional.empty());
 
-        assertEquals("core.settler.not_loaded", reason(recruitment.hire(player, SITE, id)));
+        assertEquals("core.settler.not_loaded", reason(recruitment.hire(player, SITE, id).join()));
         verify(coins, never()).take(any(), anyLong());
     }
 

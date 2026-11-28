@@ -2,6 +2,7 @@ package me.mykindos.betterpvp.clans.world.camp.upgrade;
 
 import com.google.inject.Inject;
 import com.google.inject.Singleton;
+import lombok.CustomLog;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.world.camp.Camp;
 import me.mykindos.betterpvp.clans.world.camp.CampConfig;
@@ -9,8 +10,9 @@ import me.mykindos.betterpvp.clans.world.camp.CampConstruction;
 import me.mykindos.betterpvp.clans.world.camp.CampStore;
 import me.mykindos.betterpvp.clans.world.camp.structure.CampUpgrades;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
@@ -18,6 +20,7 @@ import me.mykindos.betterpvp.core.world.settler.wage.CoinAccount;
 import me.mykindos.betterpvp.core.world.site.SiteKey;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
@@ -39,6 +42,7 @@ import me.mykindos.betterpvp.core.utilities.model.tag.CoinsTag;
  * the fund plus what contributors could still pay today.
  */
 @Singleton
+@CustomLog
 public class WagePolicy {
 
     public static final String ID = "wage_policy";
@@ -50,10 +54,12 @@ public class WagePolicy {
     private final CampConfig config;
     private final ClanManager clanManager;
     private final ClientManager clientManager;
+    private final Ledger ledger;
 
     @Inject
     public WagePolicy(@NotNull CampUpgrades upgrades, @NotNull CampStore store, @NotNull CampConfig config,
-                      @NotNull ClanManager clanManager, @NotNull ClientManager clientManager) {
+                      @NotNull ClanManager clanManager, @NotNull ClientManager clientManager, @NotNull Ledger ledger) {
+        this.ledger = ledger;
         this.upgrades = upgrades;
         this.store = store;
         this.config = config;
@@ -147,13 +153,23 @@ public class WagePolicy {
                 return;
             }
             final Gamer gamer = gamer(player);
-            gamer.saveProperty(GamerProperty.BALANCE, gamer.getBalance() - (int) (long) share);
-            camp.getWageContributions().merge(member, share, Long::sum);
-            UtilMessage.plain(player, ChatIcon.NEWS.line(Translations.component("clans.camp.upgrade.wage_policy.paid",
-                    CoinsTag.of(Component.text(UtilFormat.formatNumber((int) (long) share), NamedTextColor.WHITE)))
-                    .color(NamedTextColor.YELLOW)));
+            ledger.move(LedgerParty.of(gamer), LedgerParty.system(LedgerAccounts.CAMP), share, "camp.wages").thenAccept(receipt -> {
+                if (!receipt.isPosted()) {
+                    log.warn("Could not take {}'s wage share of {} for camp {}: {}", player.getName(), share,
+                            key.getOwnerId(), receipt.getStatus()).submit();
+                    UtilMessage.plain(player, ChatIcon.NEWS.line(Translations.component(
+                            "clans.camp.upgrade.wage_policy.share_failed",
+                            CoinsTag.of(Component.text(UtilFormat.formatNumber((int) (long) share), NamedTextColor.WHITE)))
+                            .color(NamedTextColor.RED)));
+                    return;
+                }
+                camp.getWageContributions().merge(member, share, Long::sum);
+                store.changed(key.getOwnerId());
+                UtilMessage.plain(player, ChatIcon.NEWS.line(Translations.component("clans.camp.upgrade.wage_policy.paid",
+                        CoinsTag.of(Component.text(UtilFormat.formatNumber((int) (long) share), NamedTextColor.WHITE)))
+                        .color(NamedTextColor.YELLOW)));
+            });
         });
-        store.changed(key.getOwnerId());
     }
 
     /**

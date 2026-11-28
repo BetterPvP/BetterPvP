@@ -51,3 +51,40 @@ jobs:
             **/build/test-results/test/**/*.xml
           check_run: false
           job_summary: true
+
+  # Real NATS, Postgres and network services in Docker, kept out of the unit tests so those stay fast
+  network-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-read-only: true
+
+      - name: Make gradlew executable
+        run: chmod +x ./gradlew
+
+      - name: Run cross-service tests
+        run: ./gradlew :core:networkTest :clans:networkTest
+
+      - name: Publish cross-service test summary
+        if: always()
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        with:
+          files: |
+            **/build/test-results/networkTest/**/*.xml
+          check_run: false
+          job_summary: true
+          check_name: Cross-service test results

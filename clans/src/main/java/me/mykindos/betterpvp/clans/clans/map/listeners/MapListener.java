@@ -4,6 +4,7 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import lombok.RequiredArgsConstructor;
 import me.mykindos.betterpvp.clans.clans.events.ClanDisbandEvent;
+import me.mykindos.betterpvp.clans.clans.events.ClanDisbandedElsewhereEvent;
 import me.mykindos.betterpvp.clans.clans.events.ClanRelationshipEvent;
 import me.mykindos.betterpvp.clans.clans.events.ClanTerritoryEvent;
 import me.mykindos.betterpvp.clans.clans.map.ClanMapService;
@@ -121,6 +122,12 @@ public class MapListener implements Listener {
         if (event.isCancelled()) {
             return;
         }
+        clanMapService.invalidateAll();
+        clanMapService.claimsChanged();
+    }
+
+    @EventHandler
+    public void onDisbandedElsewhere(ClanDisbandedElsewhereEvent event) {
         clanMapService.invalidateAll();
         clanMapService.claimsChanged();
     }

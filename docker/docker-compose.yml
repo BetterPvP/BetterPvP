@@ -16,3 +16,34 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  nats:
+    image: nats:2.11-alpine
+    container_name: nats
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8222/healthz?js-enabled-only=true"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Runs the jar ./gradlew shadowJar leaves in build/
+  sessions:
+    image: eclipse-temurin:25-jre
+    container_name: sessions
+    command: ["java", "-jar", "/app/sessions-service.jar"]
+    environment:
+      SESSIONS_NATS_URL: nats://nats:4222
+    volumes:
+      - ../build/sessions-service.jar:/app/sessions-service.jar:ro
+    depends_on:
+      nats:
+        condition: service_healthy
+
+volumes:
+  nats-data:

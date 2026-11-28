@@ -2,6 +2,8 @@ package me.mykindos.betterpvp.clans.world.camp;
 
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
+import me.mykindos.betterpvp.clans.clans.writer.CampGrant;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.clans.world.camp.resource.CampResources;
 import me.mykindos.betterpvp.clans.world.camp.resource.ResourceChests;
 import me.mykindos.betterpvp.clans.world.camp.resource.ResourceOverflow;
@@ -39,9 +41,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -68,7 +72,12 @@ class CampRulesTest {
                 ClanMember.MemberRank.LEADER, EnumSet.allOf(ConstructionAction.class),
                 ClanMember.MemberRank.RECRUIT, EnumSet.of(ConstructionAction.CLAIM)));
         resources = new CampResources(store, chests, campWide);
-        permissions = new CampPermissions(clanManager, store, config);
+        final ClanWriter writer = mock(ClanWriter.class);
+        permissions = new CampPermissions(clanManager, store, config, writer);
+        doAnswer(call -> {
+            permissions.apply(call.getArgument(0), call.getArgument(1));
+            return null;
+        }).when(writer).setCampPermission(anyLong(), any(CampGrant.class));
         construction = new CampConstruction(store, resources, permissions,
                 new ResourceOverflow(store, resources, config), mock(CrewRule.class), mock(SalvageBin.class),
                 mock(ConstructionSites.class), mock(RankLockbox.class), mock(Camps.class));

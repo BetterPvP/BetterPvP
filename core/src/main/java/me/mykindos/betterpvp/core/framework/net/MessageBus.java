@@ -30,6 +30,14 @@ public interface MessageBus {
      */
     @NotNull CompletableFuture<List<BusMessage>> request(@NotNull BusMessage message, @NotNull Duration timeout);
 
+    /**
+     * Asks a topic that one service answers and takes the first reply, or empty once {@code timeout} passes with
+     * none. A transport that can tell when a reply has arrived completes as soon as it does.
+     */
+    default @NotNull CompletableFuture<Optional<BusMessage>> ask(@NotNull BusMessage message, @NotNull Duration timeout) {
+        return request(message, timeout).thenApply(replies -> replies.stream().findFirst());
+    }
+
     /** Handles messages on a topic. */
     void subscribe(@NotNull String topic, @NotNull Consumer<BusMessage> handler);
 

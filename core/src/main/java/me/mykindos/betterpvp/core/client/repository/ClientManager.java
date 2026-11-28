@@ -150,8 +150,7 @@ public class ClientManager extends PlayerManager<Client> {
     }
 
     /**
-     * Unloads the given client by saving its state to a Redis layer if Redis is enabled
-     * and then invalidating the client's unique ID in the local store cache.
+     * Unloads the given client by invalidating the client's unique ID in the local store cache.
      * <p>
      * The client will only be unloaded if the player is offline.
      *
@@ -242,7 +241,7 @@ public class ClientManager extends PlayerManager<Client> {
 
     /**
      * Loads an offline {@link Client} based on the specified UUID by searching in the storage
-     * and optionally using Redis and SQL as data sources. This method applies timeouts for data retrieval
+     * and then SQL. This method applies timeouts for data retrieval
      * to ensure responsiveness.
      *
      * @param uuid the unique identifier of the
@@ -343,8 +342,7 @@ public class ClientManager extends PlayerManager<Client> {
     }
 
     /**
-     * Saves the provided client instance to persistent storage layers.
-     * If the Redis
+     * Saves the provided client instance to SQL.
      */
     @Override
     public void save(Client client) {
@@ -353,8 +351,7 @@ public class ClientManager extends PlayerManager<Client> {
 
     /**
      * Saves the target client to the ignore list of the specified client.
-     * If Redis is enabled, updates are saved to Redis. The ignore relationship is
-     * also persisted in the SQL database.
+     * The ignore relationship is persisted in the SQL database.
      *
      * @param client the client performing the ignore operation
      * @param target the client to be ignored
@@ -367,7 +364,7 @@ public class ClientManager extends PlayerManager<Client> {
     /**
      * Removes a target client from the ignore list of the specified client.
      * This operation updates both local and persistent storage layers,
-     * including Redis and SQL databases, if applicable.
+     * including the SQL database.
      *
      * @param client The client whose ignore list will be modified.
      * @

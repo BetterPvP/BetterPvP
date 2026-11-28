@@ -43,3 +43,41 @@ bypass = true
 [ranks.DEVELOPER]
 priority = 200
 bypass = true
+
+# Placement decides which server hosts each camp and instance. Off unless the network runs NATS and Agones.
+[placement]
+enabled = false
+nats_url = "nats://127.0.0.1:4222"
+nats_token = ""
+prefix = "bpvp"
+replicas = 1
+lease_ttl_seconds = 60
+default_role = "camp"
+kubernetes_url = "https://kubernetes.default.svc"
+namespace = ""
+
+# The role each site runs on. Sites not listed run on default_role.
+[placement.sites]
+camp = "camp"
+hub = "hub"
+dungeon = "dungeon"
+event = "event"
+
+# The Agones fleet and counter behind each role
+[placement.fleets.camp]
+fleet = "camp"
+counter = "camp-slots"
+
+[placement.fleets.hub]
+fleet = "hub"
+counter = "players"
+
+[placement.fleets.dungeon]
+fleet = "dungeon"
+counter = "players"
+
+# Started when an event server is wanted and none is running, and back at zero otherwise
+[placement.fleets.event]
+fleet = "event"
+counter = "players"
+scale_from_zero = true

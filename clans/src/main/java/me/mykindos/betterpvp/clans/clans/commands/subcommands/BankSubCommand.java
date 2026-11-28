@@ -5,19 +5,21 @@ import com.google.inject.Singleton;
 import lombok.CustomLog;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
-import me.mykindos.betterpvp.clans.clans.ClanProperty;
 import me.mykindos.betterpvp.clans.clans.commands.ClanCommand;
 import me.mykindos.betterpvp.clans.clans.commands.ClanSubCommand;
+import me.mykindos.betterpvp.clans.clans.writer.ClanBank;
 import me.mykindos.betterpvp.core.client.Client;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.command.SubCommand;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import me.mykindos.betterpvp.ledger.LedgerStatus;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 
 @CustomLog
@@ -73,9 +75,12 @@ public class BankSubCommand extends ClanSubCommand {
     @SubCommand(BankSubCommand.class)
     private static class BankWithdrawSubCommand extends ClanSubCommand {
 
+        private final ClanBank bank;
+
         @Inject
-        public BankWithdrawSubCommand(ClanManager clanManager, ClientManager clientManager) {
+        public BankWithdrawSubCommand(ClanManager clanManager, ClientManager clientManager, ClanBank bank) {
             super(clanManager, clientManager);
+            this.bank = bank;
         }
 
         @Override
@@ -122,18 +127,24 @@ public class BankSubCommand extends ClanSubCommand {
                 }
 
 
-                clan.saveProperty(ClanProperty.BALANCE, clan.getBalance() - amountToWithdraw);
-                gamer.saveProperty(GamerProperty.BALANCE, gamer.getBalance() + amountToWithdraw);
-
-                clan.getMembers().forEach(member -> {
-                    Player clanPlayer = org.bukkit.Bukkit.getPlayer(member.getUuid());
-                    if (clanPlayer != null) {
-                        UtilMessage.message(clanPlayer, CLANS_PREFIX, "clans.command.clan.bank.withdraw.success",
-                                Component.text(player.getName(), NamedTextColor.YELLOW),
-                                Component.text("$" + amountToWithdraw, NamedTextColor.GREEN));
-                    }
-                });
-                log.info("{} withdrew ${} from clan {}", player.getName(), amountToWithdraw, clan.getId()).submit();
+                bank.move(bank.account(clan), LedgerParty.of(gamer), amountToWithdraw, "clan.bank.withdraw")
+                        .thenAccept(receipt -> {
+                            if (!receipt.isPosted()) {
+                                UtilMessage.message(player, CLANS_PREFIX, receipt.getStatus() == LedgerStatus.INSUFFICIENT_FUNDS
+                                        ? "clans.command.clan.bank.withdraw.insufficient-funds"
+                                        : "core.ledger.unavailable");
+                                return;
+                            }
+                            clan.getMembers().forEach(member -> {
+                                Player clanPlayer = Bukkit.getPlayer(member.getUuid());
+                                if (clanPlayer != null) {
+                                    UtilMessage.message(clanPlayer, CLANS_PREFIX, "clans.command.clan.bank.withdraw.success",
+                                            Component.text(player.getName(), NamedTextColor.YELLOW),
+                                            Component.text("$" + amountToWithdraw, NamedTextColor.GREEN));
+                                }
+                            });
+                            log.info("{} withdrew ${} from clan {}", player.getName(), amountToWithdraw, clan.getId()).submit();
+                        });
             }catch(NumberFormatException ex) {
                 UtilMessage.message(player, CLANS_PREFIX, "clans.command.clan.bank.withdraw.not-number");
             }
@@ -156,9 +167,12 @@ public class BankSubCommand extends ClanSubCommand {
     @SubCommand(BankSubCommand.class)
     private static class BankDepositSubCommand extends ClanSubCommand {
 
+        private final ClanBank bank;
+
         @Inject
-        public BankDepositSubCommand(ClanManager clanManager, ClientManager clientManager) {
+        public BankDepositSubCommand(ClanManager clanManager, ClientManager clientManager, ClanBank bank) {
             super(clanManager, clientManager);
+            this.bank = bank;
         }
 
         @Override
@@ -198,18 +212,24 @@ public class BankSubCommand extends ClanSubCommand {
                     return;
                 }
 
-                clan.saveProperty(ClanProperty.BALANCE, clan.getBalance() + amountToWithdraw);
-                gamer.saveProperty(GamerProperty.BALANCE, gamer.getBalance() - amountToWithdraw);
-
-                clan.getMembers().forEach(member -> {
-                    Player clanPlayer = org.bukkit.Bukkit.getPlayer(member.getUuid());
-                    if (clanPlayer != null) {
-                        UtilMessage.message(clanPlayer, CLANS_PREFIX, "clans.command.clan.bank.deposit.success",
-                                Component.text(player.getName(), NamedTextColor.YELLOW),
-                                Component.text("$" + amountToWithdraw, NamedTextColor.GREEN));
-                    }
-                });
-                log.info("{} deposited ${} into clan {}", player.getName(), amountToWithdraw, clan.getId()).submit();
+                bank.move(LedgerParty.of(gamer), bank.account(clan), amountToWithdraw, "clan.bank.deposit")
+                        .thenAccept(receipt -> {
+                            if (!receipt.isPosted()) {
+                                UtilMessage.message(player, CLANS_PREFIX, receipt.getStatus() == LedgerStatus.INSUFFICIENT_FUNDS
+                                        ? "clans.command.clan.bank.deposit.insufficient-funds"
+                                        : "core.ledger.unavailable");
+                                return;
+                            }
+                            clan.getMembers().forEach(member -> {
+                                Player clanPlayer = Bukkit.getPlayer(member.getUuid());
+                                if (clanPlayer != null) {
+                                    UtilMessage.message(clanPlayer, CLANS_PREFIX, "clans.command.clan.bank.deposit.success",
+                                            Component.text(player.getName(), NamedTextColor.YELLOW),
+                                            Component.text("$" + amountToWithdraw, NamedTextColor.GREEN));
+                                }
+                            });
+                            log.info("{} deposited ${} into clan {}", player.getName(), amountToWithdraw, clan.getId()).submit();
+                        });
             }catch(NumberFormatException ex) {
                 UtilMessage.message(player, CLANS_PREFIX, "clans.command.clan.bank.deposit.not-number");
             }

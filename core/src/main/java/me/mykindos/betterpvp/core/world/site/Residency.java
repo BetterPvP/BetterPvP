@@ -208,7 +208,10 @@ public class Residency implements Listener {
                 .flatMap(instance -> spotIn(instance, residence, site.get().getPolicy().getRejoinAt()));
     }
 
-    /** Whether the site would take the player back, but only once a world has been opened for them. */
+    /**
+     * Whether the site would take the player back, but only once a world has been opened for them. An owned site they
+     * left on another server is one, since whichever server holds it now is found by opening it again.
+     */
     private boolean needsWorldOpened(@NotNull Residence residence) {
         final Optional<Site> site = registry.get(residence.getSite().getSiteId());
         if (site.isEmpty()) {
@@ -217,6 +220,11 @@ public class Residency implements Listener {
 
         final SitePolicy.Rejoin rejoin = site.get().getPolicy().getRejoin();
         if (rejoin == SitePolicy.Rejoin.REINSTANCE) {
+            return true;
+        }
+
+        if (rejoin == SitePolicy.Rejoin.RESUME && residence.getSite().isOwned()
+                && !residence.getLocation().isLocal() && instances.find(residence.getInstanceId()).isEmpty()) {
             return true;
         }
 

@@ -7,6 +7,7 @@ import me.mykindos.betterpvp.core.framework.events.ServerStartEvent;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
+import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -141,6 +142,29 @@ public class SiteInstances implements Listener {
             store.updateState(id, SiteInstance.State.DORMANT);
             UtilServer.callEvent(new SiteInstanceDormantEvent(instance));
             log.info("Site instance {} ({}) is dormant", id, instance.getKey()).submit();
+        });
+    }
+
+    /**
+     * Closes an instance's world and stops holding it here, without destroying anything, so another server can open
+     * it. {@link SiteInstanceHandoffEvent} fires once the world is closed and its futures have finished, which is
+     * where an owner's record is written down for the server taking over.
+     */
+    public @NotNull CompletableFuture<Void> handOff(@NotNull UUID id) {
+        final SiteInstance instance = instances.get(id);
+        if (instance == null) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        instance.setState(SiteInstance.State.RELEASING);
+        return worlds.unload(instance.getWorldName()).thenCompose(unused -> {
+            final SiteInstanceHandoffEvent event = new SiteInstanceHandoffEvent(instance, !Bukkit.isPrimaryThread());
+            UtilServer.callEvent(event);
+            return event.whenSaved();
+        }).thenRun(() -> {
+            instances.remove(id);
+            store.delete(id);
+            log.info("Handed off site instance {} ({})", id, instance.getKey()).submit();
         });
     }
 

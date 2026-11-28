@@ -9,10 +9,14 @@ import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.leveling.ClanPerkManager;
 import me.mykindos.betterpvp.clans.clans.leveling.perk.model.ClanVaultSlot;
-import me.mykindos.betterpvp.clans.clans.repository.ClanRepository;
+import me.mykindos.betterpvp.clans.clans.core.storage.ClanInventories;
+import me.mykindos.betterpvp.clans.clans.core.storage.LockAnswer;
 import me.mykindos.betterpvp.core.components.clans.data.ClanMember;
 import me.mykindos.betterpvp.core.menu.Windowed;
 import me.mykindos.betterpvp.core.utilities.UtilItem;
+import me.mykindos.betterpvp.core.utilities.UtilMessage;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -66,13 +70,36 @@ public final class ClanVault {
         return UtilItem.serializeItemStackMap(new Int2ObjectOpenHashMap<>(contents));
     }
 
+    /** Shows the vault once no one else has it open, here or on another server. */
     public void show(Player player, Windowed previous) throws IllegalStateException {
         Preconditions.checkState(!isLocked(), "Clan vault is locked");
         lockedBy = player.getName();
-        new GuiClanVault(player, this, previous).show(player).addCloseHandler(() -> {
-            lockedBy = null;
-            clans.getInjector().getInstance(ClanRepository.class).updateClanVault(clan);
+        final ClanInventories inventories = clans.getInjector().getInstance(ClanInventories.class);
+        inventories.open(clan, ClanInventories.Inventory.VAULT, player.getName()).thenAccept(answer -> {
+            if (!answer.isTaken()) {
+                lockedBy = null;
+                refuse(player, answer);
+                return;
+            }
+            if (!player.isOnline()) {
+                lockedBy = null;
+                inventories.close(clan, ClanInventories.Inventory.VAULT);
+                return;
+            }
+            new GuiClanVault(player, this, previous).show(player).addCloseHandler(() -> {
+                lockedBy = null;
+                inventories.close(clan, ClanInventories.Inventory.VAULT);
+            });
         });
+    }
+
+    private static void refuse(@NotNull Player player, @NotNull LockAnswer answer) {
+        if (answer.getHolder() != null) {
+            UtilMessage.message(player, "clans.prefix", "clans.core.vault.locked",
+                    Component.text(answer.getHolder(), NamedTextColor.DARK_RED));
+        } else {
+            UtilMessage.message(player, "clans.prefix", "clans.core.storage.unavailable");
+        }
     }
 
     public void show(Player player) throws IllegalStateException {

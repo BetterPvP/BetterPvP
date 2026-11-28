@@ -1,0 +1,20 @@
+config:
+  cluster:
+    enabled: true
+    replicas: 3
+  jetstream:
+    enabled: true
+    fileStore:
+      pvc:
+        size: 1Gi
+    # The directory buckets (instances, servers, reserved, arrivals) keep their keys in memory.
+    memoryStore:
+      enabled: true
+      maxSize: 256Mi
+container:
+  merge:
+    resources:
+      limits:
+        memory: 512Mi
+natsBox:
+  enabled: false

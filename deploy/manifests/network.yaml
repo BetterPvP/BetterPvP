@@ -1,0 +1,39 @@
+apiVersion: shulkermc.io/v1alpha1
+kind: MinecraftCluster
+metadata:
+  name: bpvp
+  namespace: bpvp
+spec: {}
+---
+apiVersion: shulkermc.io/v1alpha1
+kind: ProxyFleet
+metadata:
+  name: proxy
+  namespace: bpvp
+spec:
+  clusterRef:
+    name: bpvp
+  replicas: 2
+  service:
+    type: LoadBalancer
+  template:
+    spec:
+      version:
+        channel: Velocity
+        name: latest
+      config: {}
+      podOverrides:
+        image:
+          name: __PROXY_IMAGE__
+          pullPolicy: __PULL_POLICY__
+          imagePullSecrets:
+            - name: ghcr
+        env:
+          # k3d's load balancer hides the player's address, so Mojang's IP check would reject every join.
+          - name: BPVP_PREVENT_CLIENT_PROXY_CONNECTIONS
+            value: "false"
+        resources:
+          requests:
+            memory: 384Mi
+          limits:
+            memory: 768Mi

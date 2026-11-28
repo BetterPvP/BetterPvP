@@ -6,14 +6,17 @@ import lombok.CustomLog;
 import lombok.Getter;
 import lombok.Setter;
 import me.mykindos.betterpvp.core.client.Client;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Movement;
 import me.mykindos.betterpvp.core.item.ItemFactory;
 import me.mykindos.betterpvp.core.item.ItemRegistry;
 import me.mykindos.betterpvp.core.item.component.impl.uuid.UUIDProperty;
 import me.mykindos.betterpvp.core.logging.LogContext;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import me.mykindos.betterpvp.shops.auctionhouse.events.AuctionBuyEvent;
 import me.mykindos.betterpvp.shops.auctionhouse.events.AuctionCancelEvent;
 import me.mykindos.betterpvp.shops.auctionhouse.repository.AuctionRepository;
@@ -21,9 +24,11 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Singleton
 @Getter
@@ -34,14 +39,21 @@ public class AuctionManager {
     private final ItemFactory itemFactory;
     private final ClientManager clientManager;
     private final AuctionRepository auctionRepository;
+    private final Ledger ledger;
 
     private final List<Auction> activeAuctions = new ArrayList<>();
+    /** Listings whose purchase is waiting on the ledger, so a second click cannot buy them again. */
+    private final Set<Long> buying = ConcurrentHashMap.newKeySet();
+    /** Auctions whose item is being delivered, so a delivery that takes a while is not started twice. */
+    private final Set<Long> delivering = ConcurrentHashMap.newKeySet();
 
     @Setter
     private IAuctionDeliveryService deliveryService = new DefaultAuctionDeliveryService();
 
     @Inject
-    public AuctionManager(ItemRegistry itemRegistry, ItemFactory itemFactory, ClientManager clientManager, AuctionRepository auctionRepository) {
+    public AuctionManager(ItemRegistry itemRegistry, ItemFactory itemFactory, ClientManager clientManager,
+                          AuctionRepository auctionRepository, Ledger ledger) {
+        this.ledger = ledger;
         this.itemRegistry = itemRegistry;
         this.itemFactory = itemFactory;
         this.clientManager = clientManager;
@@ -85,20 +97,43 @@ public class AuctionManager {
             return;
         }
 
-        Client buyer = clientManager.search().online(player);
-        buyer.getGamer().saveProperty(GamerProperty.BALANCE.name(), buyer.getGamer().getBalance() - auction.getSellPrice());
+        if (auction.isSold() || !buying.add(auction.getAuctionID())) {
+            UtilMessage.message(player, "core.prefix.auction-house", "shops.auctionhouse.already-sold");
+            return;
+        }
 
+        // The reference makes the listing sell once across every server.
+        final Client buyer = clientManager.search().online(player);
+        final Movement payment = new Movement(LedgerParty.of(buyer.getGamer()), LedgerParty.system(LedgerAccounts.AUCTION_HOUSE),
+                auction.getSellPrice(), "auction.buy");
+        ledger.post(List.of(payment), "auction:" + auction.getAuctionID()).thenAccept(receipt -> {
+            buying.remove(auction.getAuctionID());
+            if (receipt.isPosted() && !auction.isSold()) {
+                completePurchase(player, auction);
+                return;
+            }
+            final String reason = switch (receipt.getStatus()) {
+                case DUPLICATE, POSTED -> "shops.auctionhouse.already-sold";
+                case INSUFFICIENT_FUNDS -> "shops.listener.auctionhouse.insufficient-funds";
+                default -> "core.ledger.unavailable";
+            };
+            UtilMessage.message(player, "core.prefix.auction-house", reason);
+        });
+    }
+
+    private void completePurchase(Player player, Auction auction) {
         auction.setSold(true);
         getAuctionRepository().setSold(auction, true);
         getAuctionRepository().saveAuctionTransaction(player.getUniqueId(), auction);
 
-        getDeliveryService().deliverCurrency(auction.getSeller(), (int) (auction.getSellPrice() * 0.95));
+        getDeliveryService().deliverCurrency(auction.getSeller(), (int) (auction.getSellPrice() * 0.95),
+                "auction-proceeds:" + auction.getAuctionID());
 
-        if (getDeliveryService().deliverAuction(player.getUniqueId(), auction)) {
-            auction.setDelivered(true);
-            getAuctionRepository().setDelivered(auction, true);
-            getActiveAuctions().remove(auction);
-        }
+        deliverAuction(player.getUniqueId(), auction).thenAccept(delivered -> {
+            if (delivered) {
+                getActiveAuctions().remove(auction);
+            }
+        });
 
         itemFactory.fromItemStack(auction.getItemStack()).ifPresent(itemInstance -> {
             itemInstance.getComponent(UUIDProperty.class).ifPresent(uuidProperty -> {
@@ -132,13 +167,13 @@ public class AuctionManager {
         auction.setCancelled(true);
         getAuctionRepository().setCancelled(auction, true);
 
-        if (getDeliveryService().deliverAuction(auction.getSeller(), auction)) {
-            auction.setDelivered(true);
-            getAuctionRepository().setDelivered(auction, true);
-            getActiveAuctions().remove(auction);
-        } else {
-            log.warn("Failed to deliver cancelled auction {}", auction.getAuctionID()).submit();
-        }
+        deliverAuction(auction.getSeller(), auction).thenAccept(delivered -> {
+            if (delivered) {
+                getActiveAuctions().remove(auction);
+            } else {
+                log.warn("Failed to deliver cancelled auction {}", auction.getAuctionID()).submit();
+            }
+        });
 
         itemFactory.fromItemStack(auction.getItemStack()).ifPresent(itemInstance -> {
             itemInstance.getComponent(UUIDProperty.class).ifPresent(uuidProperty -> {
@@ -152,9 +187,7 @@ public class AuctionManager {
     }
 
     public void cancelAllAuctions(UUID seller) {
-        Iterator<Auction> auctionIterator = activeAuctions.iterator();
-        while (auctionIterator.hasNext()) {
-            Auction auction = auctionIterator.next();
+        for (Auction auction : List.copyOf(activeAuctions)) {
             if (!auction.getSeller().equals(seller)) {
                 continue;
             }
@@ -162,11 +195,11 @@ public class AuctionManager {
             getAuctionRepository().setCancelled(auction, true);
             auction.setCancelled(true);
 
-            if (getDeliveryService().deliverAuction(auction.getSeller(), auction)) {
-                auction.setDelivered(true);
-                getAuctionRepository().setDelivered(auction, true);
-                auctionIterator.remove();
-            }
+            deliverAuction(auction.getSeller(), auction).thenAccept(delivered -> {
+                if (delivered) {
+                    activeAuctions.remove(auction);
+                }
+            });
 
             itemFactory.fromItemStack(auction.getItemStack()).ifPresent(itemInstance -> {
                 itemInstance.getComponent(UUIDProperty.class).ifPresent(uuidProperty -> {
@@ -180,15 +213,23 @@ public class AuctionManager {
         }
     }
 
-    public boolean deliverAuction(UUID target, Auction auction) {
-        if (deliveryService.deliverAuction(target, auction)) {
-            auction.setDelivered(true);
-            auctionRepository.setDelivered(auction, true);
-
-            return true;
+    /** Delivers the auction's item to {@code target}, completing with whether it was delivered. */
+    public CompletableFuture<Boolean> deliverAuction(UUID target, Auction auction) {
+        if (!delivering.add(auction.getAuctionID())) {
+            return CompletableFuture.completedFuture(false);
         }
-
-        return false;
+        return deliveryService.deliverAuction(target, auction).handle((delivered, error) -> {
+            delivering.remove(auction.getAuctionID());
+            if (error != null) {
+                log.error("Failed to deliver auction {}", auction.getAuctionID(), error).submit();
+                return false;
+            }
+            if (delivered) {
+                auction.setDelivered(true);
+                auctionRepository.setDelivered(auction, true);
+            }
+            return delivered;
+        });
     }
 
 }

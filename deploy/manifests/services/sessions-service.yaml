@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sessions-service
+  namespace: bpvp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sessions-service
+  template:
+    metadata:
+      labels:
+        app: sessions-service
+    spec:
+      imagePullSecrets:
+        - name: ghcr
+      containers:
+        - name: sessions-service
+          image: __IMAGE__
+          imagePullPolicy: __PULL_POLICY__
+          env:
+            - name: SESSIONS_NATS_URL
+              value: nats://nats:4222
+            - name: SESSIONS_NATS_PREFIX
+              value: bpvp
+          resources:
+            requests:
+              memory: 128Mi
+            limits:
+              memory: 384Mi

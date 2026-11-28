@@ -279,16 +279,17 @@ public class StructureActionsMenu extends AbstractGui implements Windowed {
             if (blocked != null || worksite == null) {
                 return;
             }
-            final ConstructionResult result = rush.rush(player, worksite, structure);
-            if (!result.isSuccess()) {
-                if (result.getReason() != null) {
-                    menus.tell(player, result.getReason());
+            rush.rush(player, worksite, structure).thenAccept(result -> {
+                if (!result.isSuccess()) {
+                    if (result.getReason() != null) {
+                        menus.tell(player, result.getReason());
+                    }
+                } else {
+                    menus.tell(player, Translations.component("clans.camp.upgrade.rush_order.done",
+                            type.getDisplayName().color(NamedTextColor.WHITE)).color(NamedTextColor.GREEN));
                 }
-            } else {
-                menus.tell(player, Translations.component("clans.camp.upgrade.rush_order.done",
-                        type.getDisplayName().color(NamedTextColor.WHITE)).color(NamedTextColor.GREEN));
-            }
-            reopen(player);
+                reopen(player);
+            });
         });
     }
 

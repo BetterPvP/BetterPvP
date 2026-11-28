@@ -15,6 +15,7 @@ dependencies {
     compileOnly(libs.bundles.paper)
     paperweight.paperDevBundle(libs.versions.paper)
     implementation(libs.reflections)
+    implementation(project(":clans-protocol"))
 
     compileOnly(project(":core"))
     compileOnly(project(":progression"))
@@ -48,4 +49,40 @@ val jooqTestRuntime: Configuration = configurations.detachedConfiguration(
 
 tasks.test {
     classpath += jooqTestRuntime
+}
+
+// Cross-service tests against real NATS, Postgres and network services, run by networkTest instead of test
+val networkTest: SourceSet by sourceSets.creating {
+    compileClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+    runtimeClasspath += sourceSets.main.get().output + sourceSets.test.get().output
+}
+// Not the test configurations, which carry the server's own API at a version MockBukkit does not know
+configurations.named(networkTest.implementationConfigurationName) {
+    extendsFrom(configurations.implementation.get())
+}
+configurations.named(networkTest.runtimeOnlyConfigurationName) {
+    extendsFrom(configurations.testRuntimeOnly.get())
+}
+configurations.named(networkTest.compileOnlyConfigurationName) {
+    extendsFrom(configurations.compileOnly.get())
+}
+configurations.named(networkTest.annotationProcessorConfigurationName) {
+    extendsFrom(configurations.annotationProcessor.get())
+}
+
+dependencies {
+    "networkTestImplementation"(project(path = ":core", configuration = "networkTestFixtures"))
+    "networkTestImplementation"(project(":core"))
+    "networkTestImplementation"(project(":shops"))
+    "networkTestImplementation"(libs.bundles.test)
+    "networkTestImplementation"("org.mockito:mockito-core:5.23.0")
+}
+
+tasks.register<Test>("networkTest") {
+    description = "Runs the cross-service tests. Needs Docker."
+    group = "verification"
+    testClassesDirs = networkTest.output.classesDirs
+    classpath = networkTest.runtimeClasspath + jooqTestRuntime
+    useJUnitPlatform()
+    shouldRunAfter(tasks.test)
 }

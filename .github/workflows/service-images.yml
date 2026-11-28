@@ -1,0 +1,128 @@
+name: Service images
+
+on:
+  push:
+    branches: [ "camps/main", "network/preview" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: service-images-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+  BRANCH: ${{ github.head_ref || github.ref_name }}
+
+jobs:
+  image:
+    name: Build and push ${{ matrix.service }}
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [ orchestration-service, clans-service, ledger-service, sessions-service ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - name: Check the service exists
+        run: |
+          if [[ -f ${{ matrix.service }}/build.gradle.kts ]]; then echo "BUILD=true" >> "$GITHUB_ENV"; else echo "${{ matrix.service }} is not on this branch"; fi
+
+      - uses: actions/setup-java@v4
+        if: env.BUILD == 'true'
+        with:
+          java-version: '25'
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v6
+        if: env.BUILD == 'true'
+        with:
+          cache-provider: basic
+          cache-read-only: ${{ github.event_name != 'push' }}
+
+      - name: Build
+        if: env.BUILD == 'true'
+        run: ./gradlew :${{ matrix.service }}:installDist --console=plain
+
+      - name: Tags
+        if: env.BUILD == 'true'
+        run: |
+          image=ghcr.io/betterpvp/${{ matrix.service }}
+          slug=$(tr '[:upper:]' '[:lower:]' <<<"$BRANCH" | sed -E 's/[^a-z0-9._-]+/-/g; s/^[-.]+//' | cut -c1-120)
+          { echo "TAGS<<EOF"; echo "$image:$SHA"; echo "$image:${SHA:0:12}"; echo "$image:$slug"; echo "EOF"; } >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+        if: env.BUILD == 'true'
+
+      - uses: docker/login-action@v3
+        if: env.BUILD == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        if: env.BUILD == 'true'
+        with:
+          context: ${{ matrix.service }}/build/install/${{ matrix.service }}
+          file: docker/service/Dockerfile
+          push: true
+          tags: ${{ env.TAGS }}
+          build-args: |
+            SERVICE=${{ matrix.service }}
+            REVISION=${{ env.SHA }}
+
+  proxy:
+    name: Build and push the proxy image
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: temurin
+
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+          cache-read-only: ${{ github.event_name != 'push' }}
+
+      - name: Build
+        run: |
+          ./gradlew :proxy:shadowJar --console=plain
+          cp build/proxy.jar docker/proxy/proxy.jar
+
+      - name: Tags
+        run: |
+          image=ghcr.io/betterpvp/proxy
+          slug=$(tr '[:upper:]' '[:lower:]' <<<"$BRANCH" | sed -E 's/[^a-z0-9._-]+/-/g; s/^[-.]+//' | cut -c1-120)
+          { echo "TAGS<<EOF"; echo "$image:$SHA"; echo "$image:${SHA:0:12}"; echo "$image:$slug"; echo "EOF"; } >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: docker/proxy
+          push: true
+          tags: ${{ env.TAGS }}
+          build-args: REVISION=${{ env.SHA }}

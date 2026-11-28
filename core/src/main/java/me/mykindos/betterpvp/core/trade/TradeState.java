@@ -11,6 +11,9 @@ public enum TradeState {
      */
     ACKNOWLEDGING,
 
+    /** The countdown ran out and the currencies are moving. Nothing can back out until they land. */
+    SETTLING,
+
     /** The swap has happened. Terminal. */
     SETTLED,
 

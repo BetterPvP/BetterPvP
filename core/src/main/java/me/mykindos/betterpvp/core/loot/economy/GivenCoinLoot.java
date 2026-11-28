@@ -3,12 +3,14 @@ package me.mykindos.betterpvp.core.loot.economy;
 import lombok.EqualsAndHashCode;
 import me.mykindos.betterpvp.core.Core;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
-import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
 import me.mykindos.betterpvp.core.framework.economy.CoinItem;
 import me.mykindos.betterpvp.core.framework.economy.CoinPickupListener;
+import me.mykindos.betterpvp.core.framework.economy.ledger.Ledger;
+import me.mykindos.betterpvp.core.framework.economy.ledger.LedgerParty;
 import me.mykindos.betterpvp.core.loot.LootContext;
 import me.mykindos.betterpvp.core.loot.ReplacementStrategy;
+import me.mykindos.betterpvp.ledger.LedgerAccounts;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -28,6 +30,7 @@ public final class GivenCoinLoot extends CoinLoot<Map<Player, Integer>> {
     protected Map<Player, Integer> award(LootContext context) {
         Map<Player, Integer> results = new HashMap<>();
         ClientManager clientManager = JavaPlugin.getPlugin(Core.class).getInjector().getInstance(ClientManager.class);
+        Ledger ledger = JavaPlugin.getPlugin(Core.class).getInjector().getInstance(Ledger.class);
         context.getSession().getAudience().forEachAudience(audience -> {
             if (!(audience instanceof Player player)) {
                 return;
@@ -35,9 +38,11 @@ public final class GivenCoinLoot extends CoinLoot<Map<Player, Integer>> {
 
             final Gamer gamer = clientManager.search().online(player).getGamer();
             int amount = (minAmount == maxAmount) ? minAmount : ThreadLocalRandom.current().nextInt(minAmount, maxAmount + 1);
-            int newBalance = gamer.getBalance() + amount;
-            gamer.saveProperty(GamerProperty.BALANCE, newBalance);
-            CoinPickupListener.notify(gamer, amount);
+            ledger.move(LedgerParty.system(LedgerAccounts.LOOT), LedgerParty.of(gamer), amount, "loot").thenAccept(receipt -> {
+                if (receipt.isPosted() && player.isOnline()) {
+                    CoinPickupListener.notify(gamer, amount);
+                }
+            });
             results.merge(player, amount, Integer::sum);
         });
         return results;

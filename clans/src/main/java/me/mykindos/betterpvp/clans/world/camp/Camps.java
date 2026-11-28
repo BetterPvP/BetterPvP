@@ -6,6 +6,7 @@ import lombok.CustomLog;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.events.ClanDisbandEvent;
+import me.mykindos.betterpvp.clans.clans.events.ClanDisbandedElsewhereEvent;
 import me.mykindos.betterpvp.core.client.events.ClientJoinEvent;
 import me.mykindos.betterpvp.core.config.Config;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
@@ -13,6 +14,7 @@ import me.mykindos.betterpvp.core.listener.BPvPListener;
 import me.mykindos.betterpvp.core.world.site.Admission;
 import me.mykindos.betterpvp.core.world.site.SiteInstance;
 import me.mykindos.betterpvp.core.world.site.SiteInstanceDormantEvent;
+import me.mykindos.betterpvp.core.world.site.SiteInstanceHandoffEvent;
 import me.mykindos.betterpvp.core.world.site.SiteInstances;
 import me.mykindos.betterpvp.core.world.site.SiteKey;
 import me.mykindos.betterpvp.core.world.site.SiteOwners;
@@ -128,7 +130,17 @@ public class Camps implements Listener, SiteOwnership {
     /** A disbanded clan's camp goes with it, both the world it stood in and the record of what was in it. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onDisband(@NotNull ClanDisbandEvent event) {
-        final SiteKey key = keyFor(event.getClan());
+        discard(event.getClan());
+    }
+
+    /** A clan disbanded on another server may still have its camp open here, which only this server can close. */
+    @EventHandler
+    public void onDisbandedElsewhere(@NotNull ClanDisbandedElsewhereEvent event) {
+        discard(event.getClan());
+    }
+
+    private void discard(@NotNull Clan clan) {
+        final SiteKey key = keyFor(clan);
         store.delete(key.getOwnerId());
 
         instances.forKey(key).forEach(instance -> instances.release(instance.getId(), true).exceptionally(ex -> {
@@ -149,6 +161,18 @@ public class Camps implements Listener, SiteOwnership {
         final SiteKey key = event.getInstance().getKey();
         if (key.getSiteId().equals(SITE_ID)) {
             store.save(key.getOwnerId());
+        }
+    }
+
+    /**
+     * Writes a camp down for the server taking it over and lets go of it here, so nothing on this server writes it
+     * again.
+     */
+    @EventHandler
+    public void onHandoff(@NotNull SiteInstanceHandoffEvent event) {
+        final SiteKey key = event.getInstance().getKey();
+        if (key.getSiteId().equals(SITE_ID)) {
+            event.waitFor(store.save(key.getOwnerId()).thenRun(() -> store.forget(key.getOwnerId())));
         }
     }
 

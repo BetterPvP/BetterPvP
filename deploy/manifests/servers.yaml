@@ -1,0 +1,338 @@
+apiVersion: shulkermc.io/v1alpha1
+kind: MinecraftServerFleet
+metadata:
+  name: hub-template
+  namespace: bpvp
+spec:
+  clusterRef:
+    name: bpvp
+  replicas: 0
+  template:
+    spec:
+      clusterRef:
+        name: bpvp
+      tags:
+        - lobby
+      version:
+        channel: Paper
+        name: "26.3"
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
+      podOverrides:
+        image:
+          name: __IMAGE__
+          pullPolicy: __PULL_POLICY__
+          imagePullSecrets:
+            - name: ghcr
+        env:
+          - name: BPVP_ROLE
+            value: hub
+          - name: BPVP_DB_HOST
+            value: postgres-rw:5432
+          - name: BPVP_DB_NAME
+            value: betterpvp
+          - name: BPVP_DB_USER
+            value: betterpvp
+          - name: BPVP_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgres-app
+                key: password
+          - name: JAVA_OPTS
+            value: -XX:MaxRAMPercentage=60 -XX:+UseG1GC
+          - name: BPVP_CONFIG_SET
+            value: |
+              plugins/Core/config.yml .core.nats.enabled true
+              plugins/Core/config.yml .core.nats.url nats://nats:4222
+              plugins/Core/config.yml .core.nats.replicas 3
+          - name: ASSETS_BUCKET
+            valueFrom:
+              secretKeyRef: {name: assets, key: bucket, optional: true}
+          - name: ASSETS_AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: {name: assets, key: access-key-id, optional: true}
+          - name: ASSETS_AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: {name: assets, key: secret-access-key, optional: true}
+          - name: ASSETS_RESTIC_PASSWORD
+            valueFrom:
+              secretKeyRef: {name: assets, key: restic-password, optional: true}
+        resources:
+          requests:
+            memory: 1Gi
+          limits:
+            memory: __SERVER_MEMORY__
+---
+apiVersion: shulkermc.io/v1alpha1
+kind: MinecraftServerFleet
+metadata:
+  name: resource-template
+  namespace: bpvp
+spec:
+  clusterRef:
+    name: bpvp
+  replicas: 0
+  template:
+    spec:
+      clusterRef:
+        name: bpvp
+      version:
+        channel: Paper
+        name: "26.3"
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
+      podOverrides:
+        image:
+          name: __IMAGE__
+          pullPolicy: __PULL_POLICY__
+          imagePullSecrets:
+            - name: ghcr
+        env:
+          - name: BPVP_ROLE
+            value: resource
+          - name: BPVP_DB_HOST
+            value: postgres-rw:5432
+          - name: BPVP_DB_NAME
+            value: betterpvp
+          - name: BPVP_DB_USER
+            value: betterpvp
+          - name: BPVP_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgres-app
+                key: password
+          - name: JAVA_OPTS
+            value: -XX:MaxRAMPercentage=60 -XX:+UseG1GC
+          - name: BPVP_CONFIG_SET
+            value: |
+              plugins/Core/config.yml .core.nats.enabled true
+              plugins/Core/config.yml .core.nats.url nats://nats:4222
+              plugins/Core/config.yml .core.nats.replicas 3
+          - name: ASSETS_BUCKET
+            valueFrom:
+              secretKeyRef: {name: assets, key: bucket, optional: true}
+          - name: ASSETS_AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: {name: assets, key: access-key-id, optional: true}
+          - name: ASSETS_AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: {name: assets, key: secret-access-key, optional: true}
+          - name: ASSETS_RESTIC_PASSWORD
+            valueFrom:
+              secretKeyRef: {name: assets, key: restic-password, optional: true}
+        resources:
+          requests:
+            memory: 1Gi
+          limits:
+            memory: __SERVER_MEMORY__
+---
+apiVersion: shulkermc.io/v1alpha1
+kind: MinecraftServerFleet
+metadata:
+  name: camp-template
+  namespace: bpvp
+spec:
+  clusterRef:
+    name: bpvp
+  replicas: 0
+  template:
+    spec:
+      clusterRef:
+        name: bpvp
+      version:
+        channel: Paper
+        name: "26.3"
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
+      podOverrides:
+        image:
+          name: __IMAGE__
+          pullPolicy: __PULL_POLICY__
+          imagePullSecrets:
+            - name: ghcr
+        env:
+          - name: BPVP_ROLE
+            value: camp
+          - name: BPVP_DB_HOST
+            value: postgres-rw:5432
+          - name: BPVP_DB_NAME
+            value: betterpvp
+          - name: BPVP_DB_USER
+            value: betterpvp
+          - name: BPVP_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgres-app
+                key: password
+          - name: JAVA_OPTS
+            value: -XX:MaxRAMPercentage=60 -XX:+UseG1GC
+          - name: BPVP_CONFIG_SET
+            value: |
+              plugins/Core/config.yml .core.nats.enabled true
+              plugins/Core/config.yml .core.nats.url nats://nats:4222
+              plugins/Core/config.yml .core.nats.replicas 3
+              plugins/Core/config.yml .core.agones.campSlots 6
+              plugins/Clans/config.yml .clans.camp.visitors 4
+          - name: ASSETS_BUCKET
+            valueFrom:
+              secretKeyRef: {name: assets, key: bucket, optional: true}
+          - name: ASSETS_AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: {name: assets, key: access-key-id, optional: true}
+          - name: ASSETS_AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: {name: assets, key: secret-access-key, optional: true}
+          - name: ASSETS_RESTIC_PASSWORD
+            valueFrom:
+              secretKeyRef: {name: assets, key: restic-password, optional: true}
+        resources:
+          requests:
+            memory: 1Gi
+          limits:
+            memory: __SERVER_MEMORY__
+---
+apiVersion: shulkermc.io/v1alpha1
+kind: MinecraftServerFleet
+metadata:
+  name: dungeon-template
+  namespace: bpvp
+spec:
+  clusterRef:
+    name: bpvp
+  replicas: 0
+  template:
+    spec:
+      clusterRef:
+        name: bpvp
+      version:
+        channel: Paper
+        name: "26.3"
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
+      podOverrides:
+        image:
+          name: __IMAGE__
+          pullPolicy: __PULL_POLICY__
+          imagePullSecrets:
+            - name: ghcr
+        env:
+          - name: BPVP_ROLE
+            value: dungeon
+          - name: BPVP_DB_HOST
+            value: postgres-rw:5432
+          - name: BPVP_DB_NAME
+            value: betterpvp
+          - name: BPVP_DB_USER
+            value: betterpvp
+          - name: BPVP_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgres-app
+                key: password
+          - name: JAVA_OPTS
+            value: -XX:MaxRAMPercentage=60 -XX:+UseG1GC
+          - name: BPVP_CONFIG_SET
+            value: |
+              plugins/Core/config.yml .core.nats.enabled true
+              plugins/Core/config.yml .core.nats.url nats://nats:4222
+              plugins/Core/config.yml .core.nats.replicas 3
+          - name: ASSETS_BUCKET
+            valueFrom:
+              secretKeyRef: {name: assets, key: bucket, optional: true}
+          - name: ASSETS_AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: {name: assets, key: access-key-id, optional: true}
+          - name: ASSETS_AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: {name: assets, key: secret-access-key, optional: true}
+          - name: ASSETS_RESTIC_PASSWORD
+            valueFrom:
+              secretKeyRef: {name: assets, key: restic-password, optional: true}
+        resources:
+          requests:
+            memory: 1Gi
+          limits:
+            memory: __SERVER_MEMORY__
+---
+apiVersion: shulkermc.io/v1alpha1
+kind: MinecraftServerFleet
+metadata:
+  name: event-template
+  namespace: bpvp
+spec:
+  clusterRef:
+    name: bpvp
+  replicas: 0
+  template:
+    spec:
+      clusterRef:
+        name: bpvp
+      version:
+        channel: Paper
+        name: "26.3"
+      config:
+        # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
+        skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
+      podOverrides:
+        image:
+          name: __IMAGE__
+          pullPolicy: __PULL_POLICY__
+          imagePullSecrets:
+            - name: ghcr
+        env:
+          - name: BPVP_ROLE
+            value: event
+          - name: BPVP_DB_HOST
+            value: postgres-rw:5432
+          - name: BPVP_DB_NAME
+            value: betterpvp
+          - name: BPVP_DB_USER
+            value: betterpvp
+          - name: BPVP_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgres-app
+                key: password
+          - name: JAVA_OPTS
+            value: -XX:MaxRAMPercentage=60 -XX:+UseG1GC
+          - name: BPVP_CONFIG_SET
+            value: |
+              plugins/Core/config.yml .core.nats.enabled true
+              plugins/Core/config.yml .core.nats.url nats://nats:4222
+              plugins/Core/config.yml .core.nats.replicas 3
+          - name: ASSETS_BUCKET
+            valueFrom:
+              secretKeyRef: {name: assets, key: bucket, optional: true}
+          - name: ASSETS_AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef: {name: assets, key: access-key-id, optional: true}
+          - name: ASSETS_AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef: {name: assets, key: secret-access-key, optional: true}
+          - name: ASSETS_RESTIC_PASSWORD
+            valueFrom:
+              secretKeyRef: {name: assets, key: restic-password, optional: true}
+        resources:
+          requests:
+            memory: 1Gi
+          limits:
+            memory: __SERVER_MEMORY__

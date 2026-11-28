@@ -3,9 +3,12 @@ package me.mykindos.betterpvp.clans.world.camp.settler.recruit;
 import me.mykindos.betterpvp.core.client.gamer.Gamer;
 import me.mykindos.betterpvp.core.client.gamer.properties.GamerProperty;
 import me.mykindos.betterpvp.core.client.repository.ClientManager;
+import me.mykindos.betterpvp.core.framework.economy.ledger.InProcessLedger;
 import org.bukkit.entity.Player;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -21,30 +24,32 @@ class CampCoinsTest {
     private final ClientManager clientManager = mock(ClientManager.class, RETURNS_DEEP_STUBS);
     private final Gamer gamer = mock(Gamer.class);
     private final Player player = mock(Player.class);
-    private final CampCoins coins = new CampCoins(clientManager);
+    private final CampCoins coins = new CampCoins(clientManager, new InProcessLedger(posting -> {
+    }));
 
     @BeforeEach
     void setUp() {
         when(clientManager.search().online(player).getGamer()).thenReturn(gamer);
         when(gamer.getBalance()).thenReturn(1_000);
+        when(gamer.getUniqueId()).thenReturn(UUID.randomUUID());
     }
 
     @Test
     void ac25_takingNothingAlwaysSucceedsAndTakesNothing() {
-        assertTrue(coins.take(player, 0));
-        assertTrue(coins.take(player, -5));
+        assertTrue(coins.take(player, 0).join());
+        assertTrue(coins.take(player, -5).join());
         verify(gamer, never()).saveProperty(any(GamerProperty.class), any());
     }
 
     @Test
     void ac25_takingMoreThanTheyHaveFailsAndTakesNothing() {
-        assertFalse(coins.take(player, 1_001));
+        assertFalse(coins.take(player, 1_001).join());
         verify(gamer, never()).saveProperty(any(GamerProperty.class), any());
     }
 
     @Test
     void ac25_takingWhatTheyHaveTakesIt() {
-        assertTrue(coins.take(player, 300));
+        assertTrue(coins.take(player, 300).join());
         verify(gamer).saveProperty(GamerProperty.BALANCE, 700);
     }
 

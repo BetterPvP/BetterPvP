@@ -7,9 +7,12 @@ import me.mykindos.betterpvp.clans.Clans;
 import me.mykindos.betterpvp.clans.clans.Clan;
 import me.mykindos.betterpvp.clans.clans.ClanManager;
 import me.mykindos.betterpvp.clans.clans.ClanProperty;
+import me.mykindos.betterpvp.clans.clans.alert.ClanAlerts;
 import me.mykindos.betterpvp.clans.clans.insurance.Insurance;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageEndEvent;
 import me.mykindos.betterpvp.clans.clans.pillage.events.PillageStartEvent;
+import me.mykindos.betterpvp.clans.clans.writer.ClanBank;
+import me.mykindos.betterpvp.clans.clans.writer.ClanWriter;
 import me.mykindos.betterpvp.core.client.offlinemessages.OfflineMessage;
 import me.mykindos.betterpvp.core.client.offlinemessages.OfflineMessagesHandler;
 import me.mykindos.betterpvp.core.combat.damagelog.DamageLog;
@@ -19,6 +22,7 @@ import me.mykindos.betterpvp.core.config.Config;
 import me.mykindos.betterpvp.core.framework.delayedactions.events.ClanCoreTeleportEvent;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
+import me.mykindos.betterpvp.core.locale.Translations;
 import me.mykindos.betterpvp.core.utilities.UtilFormat;
 import me.mykindos.betterpvp.core.utilities.UtilMessage;
 import me.mykindos.betterpvp.core.utilities.UtilServer;
@@ -65,14 +69,21 @@ public class PillageListener implements Listener {
     private final ClanManager clanManager;
     private final DamageLogManager damageLogManager;
     private final OfflineMessagesHandler offlineMessagesHandler;
+    private final ClanWriter writer;
+    private final ClanBank bank;
+    private final ClanAlerts alerts;
 
     @Inject
-    public PillageListener(Clans clans, ClanManager clanManager, PillageHandler pillageHandler, DamageLogManager damageLogManager, OfflineMessagesHandler offlineMessagesHandler) {
+    public PillageListener(Clans clans, ClanManager clanManager, PillageHandler pillageHandler, DamageLogManager damageLogManager, OfflineMessagesHandler offlineMessagesHandler, ClanWriter writer, ClanAlerts alerts,
+                           ClanBank bank) {
+        this.bank = bank;
         this.clans = clans;
         this.clanManager = clanManager;
         this.pillageHandler = pillageHandler;
         this.damageLogManager = damageLogManager;
         this.offlineMessagesHandler = offlineMessagesHandler;
+        this.writer = writer;
+        this.alerts = alerts;
     }
 
     @UpdateEvent(delay = 5000)
@@ -103,21 +114,24 @@ public class PillageListener implements Listener {
 
         pillager.getEnemies().remove(pillagerEnemy);
         pillaged.getEnemies().remove(pillagedEnemy);
-        clanManager.getRepository().deleteClanEnemy(pillager, pillagerEnemy);
-        clanManager.getRepository().deleteClanEnemy(pillaged, pillagedEnemy);
+        writer.removeEnemy(pillager, pillaged);
 
         int amountEarnedFromBank = (int) (pillaged.getBalance() * 0.50);
         if(amountEarnedFromBank > 0) {
-            pillager.saveProperty(ClanProperty.BALANCE.name(), pillager.getBalance() + amountEarnedFromBank);
-            pillaged.saveProperty(ClanProperty.BALANCE.name(), pillaged.getBalance() - amountEarnedFromBank);
-
-            pillager.messageClan("clans.pillage.bank-deposited", new Object[]{
-                    Component.text("$" + UtilFormat.formatNumber(amountEarnedFromBank), NamedTextColor.GREEN)
-            }, null, true);
-            pillaged.messageClan("clans.pillage.bank-taken", new Object[]{
-                    Component.text("$" + UtilFormat.formatNumber(amountEarnedFromBank), NamedTextColor.RED)
-            }, null, true);
-
+            bank.move(bank.account(pillaged), bank.account(pillager), amountEarnedFromBank, "clan.pillage")
+                    .thenAccept(receipt -> {
+                        if (!receipt.isPosted()) {
+                            log.warn("{} could not take ${} from {}'s bank: {}", pillager.getName(), amountEarnedFromBank,
+                                    pillaged.getName(), receipt.getStatus()).submit();
+                            return;
+                        }
+                        pillager.messageClan("clans.pillage.bank-deposited", new Object[]{
+                                Component.text("$" + UtilFormat.formatNumber(amountEarnedFromBank), NamedTextColor.GREEN)
+                        }, null, true);
+                        pillaged.messageClan("clans.pillage.bank-taken", new Object[]{
+                                Component.text("$" + UtilFormat.formatNumber(amountEarnedFromBank), NamedTextColor.RED)
+                        }, null, true);
+                    });
         }
 
         pillaged.putProperty(ClanProperty.NO_DOMINANCE_COOLDOWN, (System.currentTimeMillis() + (3_600_000L * noDominanceCooldownHours)));
@@ -135,6 +149,15 @@ public class PillageListener implements Listener {
                 Component.text(pillager.getName(), NamedTextColor.RED),
                 Component.text(pillaged.getName(), NamedTextColor.RED));
         Bukkit.getOnlinePlayers().forEach(player -> UtilSound.playSound(player, Sound.ITEM_GOAT_HORN_SOUND_1, 1f, 0.8f, true));
+
+        final Component started = UtilMessage.getPrefix(Translations.component("clans.prefix"))
+                .append(Translations.component("clans.pillage.started",
+                        Component.text(pillager.getName(), NamedTextColor.RED),
+                        Component.text(pillaged.getName(), NamedTextColor.RED)));
+        final net.kyori.adventure.sound.Sound horn = net.kyori.adventure.sound.Sound.sound(Sound.ITEM_GOAT_HORN_SOUND_1,
+                net.kyori.adventure.sound.Sound.Source.MASTER, 1f, 0.8f);
+        alerts.alertElsewhere(pillaged.getId(), started, horn);
+        alerts.alertElsewhere(pillager.getId(), started, horn);
 
         pillaged.getMembers().forEach(clanMember -> {
             offlineMessagesHandler.sendOfflineMessage(clanMember.getUuid(),

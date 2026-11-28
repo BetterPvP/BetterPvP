@@ -8,6 +8,8 @@ import me.mykindos.betterpvp.core.combat.events.CustomKnockbackEvent;
 import me.mykindos.betterpvp.core.combat.events.DamageEvent;
 import me.mykindos.betterpvp.core.combat.events.EntityCanHurtEntityEvent;
 import me.mykindos.betterpvp.core.framework.adapter.PluginAdapter;
+import me.mykindos.betterpvp.core.framework.role.RunsOn;
+import me.mykindos.betterpvp.core.framework.role.ServerRole;
 import me.mykindos.betterpvp.core.framework.updater.UpdateEvent;
 import me.mykindos.betterpvp.core.listener.BPvPListener;
 import org.bukkit.event.Event;
@@ -18,6 +20,7 @@ import org.bukkit.event.Listener;
 @Singleton
 @BPvPListener
 @PluginAdapter("MythicMobs")
+@RunsOn({ServerRole.RESOURCE, ServerRole.DUNGEON, ServerRole.EVENT})
 public class LootChestListener implements Listener {
 
     private final LootChestManager lootChestManager;

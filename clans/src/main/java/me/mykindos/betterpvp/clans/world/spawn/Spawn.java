@@ -35,7 +35,8 @@ import java.util.List;
 @PluginAdapter("Mapper")
 public class Spawn implements WorldContent {
 
-    private static final String SITE = "spawn";
+    /** The main spawn, where players go when there is nowhere of their own to be. */
+    public static final String SITE_ID = "spawn";
 
     private final ClientManager clientManager;
     private final ClansSceneObjectFactory clansSceneFactory;
@@ -48,7 +49,7 @@ public class Spawn implements WorldContent {
         this.clientManager = clientManager;
         this.clansSceneFactory = clansSceneFactory;
         this.humanCannon = new HumanCannon(cannonService);
-        contentService.register(clans, new WorldContentBinding(sites.selector(SITE), this::content));
+        contentService.register(clans, new WorldContentBinding(sites.selector(SITE_ID), this::content));
     }
 
     private @NotNull List<WorldContent> content() {

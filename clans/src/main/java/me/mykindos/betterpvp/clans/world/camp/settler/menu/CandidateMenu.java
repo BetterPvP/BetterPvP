@@ -102,17 +102,18 @@ class CandidateMenu extends AbstractGui implements Windowed {
     }
 
     private void hire(@NotNull Player player) {
-        final SettlerResult result = cards.getRecruitment().hire(player, site, candidate.getSettler().getId());
-        if (!result.isSuccess()) {
-            if (result.getReason() != null) {
-                cards.tell(player, result.getReason());
+        cards.getRecruitment().hire(player, site, candidate.getSettler().getId()).thenAccept(result -> {
+            if (!result.isSuccess()) {
+                if (result.getReason() != null) {
+                    cards.tell(player, result.getReason());
+                }
+                return;
             }
-            return;
-        }
-        cards.tell(player, Translations.component("clans.settler.recruit.hired",
-                Component.text(candidate.getSettler().getName(), candidate.getSettler().getRarity().getColor()))
-                .color(NamedTextColor.GREEN));
-        leave(player);
+            cards.tell(player, Translations.component("clans.settler.recruit.hired",
+                    Component.text(candidate.getSettler().getName(), candidate.getSettler().getRarity().getColor()))
+                    .color(NamedTextColor.GREEN));
+            leave(player);
+        });
     }
 
     private void turnAway(@NotNull Player player) {

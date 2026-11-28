@@ -14,6 +14,13 @@ include(":game")
 include(":hub")
 include(":orchestration")
 include(":orchestration-service")
+include(":ledger")
+include(":ledger-service")
+include(":network-protocol")
+include(":sessions")
+include(":sessions-service")
+include(":clans-protocol")
+include(":clans-service")
 include(":proxy")
 
 if (File("./private/").exists()) {
@@ -138,8 +145,11 @@ dependencyResolutionManagement {
             // Library - Guice
             library("guice", "com.google.inject", "guice").version("7.0.0")
 
-            // Library - Redis
-            library("jedis", "redis.clients", "jedis").version("5.2.0")
+            // Library - NATS
+            library("jnats", "io.nats", "jnats").version("2.27.0")
+            library("testcontainers", "org.testcontainers", "testcontainers").version("2.0.5")
+            library("testcontainers-postgresql", "org.testcontainers", "testcontainers-postgresql").version("2.0.5")
+            library("testcontainers-junit", "org.testcontainers", "testcontainers-junit-jupiter").version("2.0.5")
 
             // Bundled Libraries
             bundle("test", listOf("junit-jupiter", "mockbukkit", "paper-api-test"))

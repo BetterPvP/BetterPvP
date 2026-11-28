@@ -19,6 +19,9 @@ spec:
       config:
         # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
         skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
       podOverrides:
         image:
           name: __IMAGE__
@@ -83,6 +86,9 @@ spec:
       config:
         # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
         skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
       podOverrides:
         image:
           name: __IMAGE__
@@ -147,6 +153,9 @@ spec:
       config:
         # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
         skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
       podOverrides:
         image:
           name: __IMAGE__
@@ -213,6 +222,9 @@ spec:
       config:
         # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
         skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
       podOverrides:
         image:
           name: __IMAGE__
@@ -277,6 +289,9 @@ spec:
       config:
         # Core reports Ready, health and drain to Agones itself. A second Ready from Shulker's agent undoes allocations.
         skipAgentDownload: true
+        # A new server.properties has white-list=true, which turns every player away.
+        serverProperties:
+          white-list: "false"
       podOverrides:
         image:
           name: __IMAGE__

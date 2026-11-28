@@ -28,6 +28,10 @@ spec:
           pullPolicy: __PULL_POLICY__
           imagePullSecrets:
             - name: ghcr
+        env:
+          # k3d's load balancer hides the player's address, so Mojang's IP check would reject every join.
+          - name: BPVP_PREVENT_CLIENT_PROXY_CONNECTIONS
+            value: "false"
         resources:
           requests:
             memory: 384Mi

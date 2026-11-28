@@ -110,7 +110,7 @@ Every service and server uses the NATS prefix `bpvp`. Change it in all of them a
 
 A new service: add `manifests/services/<name>.yaml` with `__IMAGE__` and `__PULL_POLICY__` where the image goes, add it to `SERVICES` and to the `Service images` workflow's list.
 
-Each server's name (`core.info.server`) is its GameServer's name, which Placement sends camps to.
+Each server's name (`core.info.server`) is its GameServer's name, which Placement sends camps to. Every server shares the `network` realm (`core.info.realm`), so clans, stats and achievements load for the whole network by season.
 
 ## Look around
 

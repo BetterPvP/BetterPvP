@@ -56,6 +56,7 @@ set_yaml() {
 
 core=plugins/Core/config.yml
 set_yaml "$core" .core.info.server "${BPVP_SERVER_NAME:-${SHULKER_SERVER_NAME:-${HOSTNAME:-$role}}}"
+set_yaml "$core" .core.info.realm "${BPVP_REALM:-network}"
 if [[ -n ${BPVP_DB_HOST:-} ]]; then
   password=${BPVP_DB_PASSWORD:-}
   [[ -n ${BPVP_DB_PASSWORD_FILE:-} ]] && password=$(< "$BPVP_DB_PASSWORD_FILE")

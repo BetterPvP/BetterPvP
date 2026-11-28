@@ -12,6 +12,7 @@ spec:
     metadata:
       labels:
         app: sessions-service
+        betterpvp.net/metrics: "true"
     spec:
       imagePullSecrets:
         - name: ghcr
@@ -19,6 +20,9 @@ spec:
         - name: sessions-service
           image: __IMAGE__
           imagePullPolicy: __PULL_POLICY__
+          ports:
+            - name: metrics
+              containerPort: 9464
           env:
             - name: SESSIONS_NATS_URL
               value: nats://nats:4222

@@ -5,6 +5,8 @@ import com.zaxxer.hikari.HikariDataSource;
 import io.nats.client.Connection;
 import io.nats.client.Nats;
 import io.nats.client.Options;
+import me.mykindos.betterpvp.metrics.MetricsExporter;
+import me.mykindos.betterpvp.metrics.NatsMetrics;
 import me.mykindos.betterpvp.network.protocol.Subjects;
 import org.jetbrains.annotations.NotNull;
 
@@ -16,7 +18,7 @@ import java.util.concurrent.CountDownLatch;
  * Starts the Clans service from environment variables: {@code NATS_URL}, {@code NATS_TOKEN} (optional),
  * {@code NATS_PREFIX} (the servers' {@code core.nats.prefix}, {@code bpvp} by default), {@code DATABASE_URL} (a JDBC
  * URL), {@code DATABASE_USER} and {@code DATABASE_PASSWORD}. The clan tables are created by the clans plugin's
- * migrations.
+ * migrations. Metrics are served on {@code METRICS_PORT}.
  */
 public final class ClansServiceApplication {
 
@@ -43,6 +45,8 @@ public final class ClansServiceApplication {
             options.token(token.toCharArray());
         }
         final Connection nats = Nats.connect(options.build());
+        final MetricsExporter metrics = MetricsExporter.forService("clans-service");
+        new NatsMetrics(nats).bindTo(metrics.getRegistry());
 
         final String prefix = System.getenv().getOrDefault("NATS_PREFIX", Subjects.DEFAULT_PREFIX);
         final ClanService service = new ClanService(nats, new ClanStore(dataSource), prefix);
@@ -58,6 +62,7 @@ public final class ClansServiceApplication {
                 Thread.currentThread().interrupt();
             }
             dataSource.close();
+            metrics.close();
             stopped.countDown();
         }, "clans-service-shutdown"));
         stopped.await();

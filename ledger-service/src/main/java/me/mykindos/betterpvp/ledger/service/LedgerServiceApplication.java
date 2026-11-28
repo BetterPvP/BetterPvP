@@ -5,6 +5,8 @@ import com.zaxxer.hikari.HikariDataSource;
 import io.nats.client.Connection;
 import io.nats.client.Nats;
 import io.nats.client.Options;
+import me.mykindos.betterpvp.metrics.MetricsExporter;
+import me.mykindos.betterpvp.metrics.NatsMetrics;
 import me.mykindos.betterpvp.network.protocol.Subjects;
 import org.flywaydb.core.Flyway;
 import org.jetbrains.annotations.NotNull;
@@ -17,7 +19,7 @@ import java.util.concurrent.Executors;
  * <p>
  * Configured from the environment: {@code LEDGER_NATS_URL}, {@code LEDGER_DB_URL}, {@code LEDGER_DB_USER},
  * {@code LEDGER_DB_PASSWORD}, {@code LEDGER_THREADS} and {@code LEDGER_NATS_PREFIX}, which matches the servers'
- * {@code core.nats.prefix}.
+ * {@code core.nats.prefix}. Metrics are served on {@code METRICS_PORT}.
  */
 public final class LedgerServiceApplication {
 
@@ -36,6 +38,8 @@ public final class LedgerServiceApplication {
                 .server(env("LEDGER_NATS_URL", Options.DEFAULT_URL))
                 .maxReconnects(-1)
                 .build());
+        final MetricsExporter metrics = MetricsExporter.forService("ledger-service");
+        new NatsMetrics(nats).bindTo(metrics.getRegistry());
         final NatsLedgerEndpoint endpoint = new NatsLedgerEndpoint(nats, env("LEDGER_NATS_PREFIX", Subjects.DEFAULT_PREFIX),
                 new LedgerRequests(new PostgresLedgerStore(dataSource)), Executors.newFixedThreadPool(threads));
         endpoint.start();
@@ -49,6 +53,7 @@ public final class LedgerServiceApplication {
                 Thread.currentThread().interrupt();
             }
             dataSource.close();
+            metrics.close();
             stopped.countDown();
         }));
         LOG.log(System.Logger.Level.INFO, "Ledger service is answering on NATS");

@@ -24,6 +24,11 @@ AGONES_VERSION=1.62.0
 SHULKER_VERSION=v0.13.0
 NATS_VERSION=2.15.3
 CNPG_VERSION=0.29.2
+KPS_VERSION=94.2.0
+LOKI_VERSION=7.7.0
+ALLOY_VERSION=1.16.0
+HEADLAMP_VERSION=0.46.0
+OBSERVABILITY=${OBSERVABILITY:-1}
 CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/bpvp-deploy
 
 for tool in docker k3d kubectl helm git jq; do
@@ -115,8 +120,8 @@ sed -e "s|__IMAGE__|$IMAGE|" -e "s|__PULL_POLICY__|$pull_policy|" -e "s|__SERVER
   manifests/servers.yaml | kubectl apply -f -
 
 # Shulker keeps each <role>-template Fleet at no replicas, because it resets replicas whenever it reconciles. The role's
-# own Fleet copies that template and adds the counters core reports, loose health, a stop grace and a console
-# (kubectl attach -i) for admin commands.
+# own Fleet copies that template and adds the counters core reports, loose health, a stop grace, a console
+# (kubectl attach -i) for admin commands and the metrics port.
 for role in $ROLES; do
   f=$(jq -c --arg r "$role" '.[$r] // empty' manifests/fleets.json)
   [[ -n $f ]] || { echo "unknown role $role in ROLES" >&2; exit 1; }
@@ -130,7 +135,9 @@ for role in $ROLES; do
       | .template.spec.counters = ($f.counters | map_values({count: 0, capacity: .}))
       | .template.spec.health = {disabled: false, initialDelaySeconds: 180, periodSeconds: 15, failureThreshold: 12}
       | .template.spec.template.spec.terminationGracePeriodSeconds = 45
-      | .template.spec.template.spec.containers |= map(if .name == "minecraft-server" then .stdin = true else . end))
+      | .template.spec.template.spec.containers |= map(if .name == "minecraft-server"
+          then .stdin = true | .ports = ((.ports // []) + [{name: "metrics", containerPort: 9464}] | unique_by(.name))
+          else . end))
   }' | kubectl apply -f -
   if jq -e '.buffer' <<<"$f" >/dev/null; then
     # BUFFER_MAX caps every role's servers, for a machine that cannot hold the spares.
@@ -149,6 +156,24 @@ for role in $(jq -j 'keys | join(" ")' manifests/fleets.json); do
   kubectl -n "$NS" delete fleetautoscaler "$role" --ignore-not-found
   kubectl -n "$NS" delete fleet "$role" --ignore-not-found
 done
+
+if [[ $OBSERVABILITY == 1 ]]; then
+  step "Observability: Prometheus $KPS_VERSION, Loki $LOKI_VERSION, Alloy $ALLOY_VERSION, Headlamp $HEADLAMP_VERSION"
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update >/dev/null
+  helm repo add grafana https://grafana.github.io/helm-charts --force-update >/dev/null
+  helm repo add headlamp https://kubernetes-sigs.github.io/headlamp/ --force-update >/dev/null
+  kubectl create namespace monitoring --dry-run=client -o yaml | kubectl apply -f - >/dev/null
+  # Grafana's admin password is made once here and never leaves the cluster.
+  if ! kubectl -n monitoring get secret grafana-admin >/dev/null 2>&1; then
+    kubectl -n monitoring create secret generic grafana-admin --from-literal=admin-user=admin       --from-literal=admin-password="$(head -c 24 /dev/urandom | base64 | tr -d '/+=')" >/dev/null
+  fi
+  helm upgrade --install monitoring prometheus-community/kube-prometheus-stack --version "$KPS_VERSION" -n monitoring     -f values/kube-prometheus-stack.yaml --wait --timeout 10m
+  helm upgrade --install loki grafana/loki --version "$LOKI_VERSION" -n monitoring -f values/loki.yaml --wait --timeout 10m
+  helm upgrade --install alloy grafana/alloy --version "$ALLOY_VERSION" -n monitoring -f values/alloy.yaml --wait --timeout 10m
+  helm upgrade --install headlamp headlamp/headlamp --version "$HEADLAMP_VERSION" -n monitoring --wait --timeout 10m
+  kubectl apply -f manifests/monitoring/podmonitors.yaml
+  kubectl -n monitoring create configmap bpvp-dashboards --from-file=manifests/monitoring/dashboards     --dry-run=client -o yaml | kubectl label --local -f - grafana_dashboard=1 -o yaml | kubectl apply -f -
+fi
 
 step "Status"
 kubectl -n "$NS" get fleets

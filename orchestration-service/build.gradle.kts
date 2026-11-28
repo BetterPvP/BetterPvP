@@ -7,6 +7,7 @@ group = "me.mykindos.betterpvp.orchestration.service"
 description = "Standalone orchestration service for queueing, admission and placement"
 
 dependencies {
+    implementation(project(":metrics"))
     implementation(project(":orchestration"))
     implementation(libs.jackson.core)
     implementation(libs.jackson.annotations)

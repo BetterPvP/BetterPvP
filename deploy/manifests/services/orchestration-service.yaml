@@ -48,6 +48,7 @@ spec:
     metadata:
       labels:
         app: orchestration-service
+        betterpvp.net/metrics: "true"
     spec:
       serviceAccountName: orchestration-service
       imagePullSecrets:
@@ -60,6 +61,8 @@ spec:
             - name: JAVA_OPTS
               value: -XX:MaxRAMPercentage=75 -Dorchestration.config=/config/config.toml
           ports:
+            - name: metrics
+              containerPort: 9464
             - name: http
               containerPort: 8085
           volumeMounts:

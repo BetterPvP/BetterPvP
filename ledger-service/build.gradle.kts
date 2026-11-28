@@ -7,6 +7,7 @@ group = "me.mykindos.betterpvp.ledger.service"
 description = "Standalone ledger service, the only writer of coins"
 
 dependencies {
+    implementation(project(":metrics"))
     implementation(project(":ledger"))
     implementation(libs.jackson.databind)
     implementation(libs.postgres)

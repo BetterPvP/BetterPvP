@@ -1,6 +1,8 @@
 package me.mykindos.betterpvp.orchestration.service;
 
 import com.sun.net.httpserver.HttpServer;
+import me.mykindos.betterpvp.metrics.MetricsExporter;
+import me.mykindos.betterpvp.metrics.NatsMetrics;
 import me.mykindos.betterpvp.orchestration.policy.QueuePriorityPolicy;
 import me.mykindos.betterpvp.orchestration.service.http.OrchestrationHttpHandler;
 import me.mykindos.betterpvp.orchestration.service.placement.PlacementConfig;
@@ -26,6 +28,10 @@ public final class OrchestrationServiceApplication {
         // Placement connects first, so a failed connect ends the process before any other thread keeps it alive.
         final PlacementConfig placementConfig = PlacementConfig.from(Toml.parse(configPath));
         final PlacementService placement = placementConfig.isEnabled() ? PlacementService.start(placementConfig) : null;
+        final MetricsExporter metrics = MetricsExporter.forService("orchestration-service");
+        if (placement != null) {
+            new NatsMetrics(placement.getConnection()).bindTo(metrics.getRegistry());
+        }
 
         final InMemoryOrchestrationGateway gateway = new InMemoryOrchestrationGateway(
                 new QueuePriorityPolicy(
@@ -49,6 +55,7 @@ public final class OrchestrationServiceApplication {
                 placement.close();
             }
             server.stop(0);
+            metrics.close();
         };
 
         final AtomicBoolean shuttingDown = new AtomicBoolean(false);

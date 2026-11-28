@@ -3,6 +3,8 @@ package me.mykindos.betterpvp.sessions.service;
 import io.nats.client.Connection;
 import io.nats.client.Nats;
 import io.nats.client.Options;
+import me.mykindos.betterpvp.metrics.MetricsExporter;
+import me.mykindos.betterpvp.metrics.NatsMetrics;
 import me.mykindos.betterpvp.network.protocol.Subjects;
 import org.jetbrains.annotations.NotNull;
 
@@ -15,7 +17,7 @@ import java.util.concurrent.Executors;
  * <p>
  * Configured from the environment: {@code SESSIONS_NATS_URL}, {@code SESSIONS_NATS_TOKEN}, {@code SESSIONS_NATS_PREFIX},
  * {@code SESSIONS_LEASE_MILLIS}, {@code SESSIONS_PROXY_TIMEOUT_MILLIS}, {@code SESSIONS_MAX_WAIT_MILLIS} and
- * {@code SESSIONS_THREADS}.
+ * {@code SESSIONS_THREADS}. Metrics are served on {@code METRICS_PORT}.
  */
 public final class SessionsServiceApplication {
 
@@ -33,6 +35,8 @@ public final class SessionsServiceApplication {
             options.token(token.toCharArray());
         }
         final Connection nats = Nats.connect(options.build());
+        final MetricsExporter metrics = MetricsExporter.forService("sessions-service");
+        new NatsMetrics(nats).bindTo(metrics.getRegistry());
 
         final LeaseBook book = new LeaseBook(Long.parseLong(env("SESSIONS_LEASE_MILLIS", "15000")),
                 Long.parseLong(env("SESSIONS_PROXY_TIMEOUT_MILLIS", "15000")), System::currentTimeMillis);
@@ -49,6 +53,7 @@ public final class SessionsServiceApplication {
             } catch (InterruptedException ex) {
                 Thread.currentThread().interrupt();
             }
+            metrics.close();
             stopped.countDown();
         }));
         LOG.log(System.Logger.Level.INFO, "Sessions service is answering on NATS");

@@ -33,6 +33,7 @@ dependencies {
     implementation(libs.hikari.cp)
     implementation(project(":network-protocol"))
     implementation(project(":sessions"))
+    implementation(project(":metrics"))
     // BouncyCastle is only for NKey and JWT sign-in, which the network does not use
     implementation(libs.jnats) {
         exclude(group = "org.bouncycastle")
